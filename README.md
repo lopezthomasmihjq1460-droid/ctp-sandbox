@@ -64,6 +64,7 @@ replace into t_broker values('9999','tcp://182.254.243.31:30001',null,null,null,
 
 
 # 源码结构
+```
  src是本软件的源码目录，包含所有必要的文件和目录
  vs32 是用于编译 win32 版本 thosttraderapi_se.so的脚本
  vs64 是用于编译 win64 版本 thosttraderapi_se.so的脚本
@@ -79,5 +80,6 @@ replace into t_broker values('9999','tcp://182.254.243.31:30001',null,null,null,
 
  dist/server/debug         //后台程序 linux  debug
  dist/server/release       //后台程序 linux  release
- dist/server/win64         //后台程序 win32		 # ctp-sandbox
-保护ctp账户安全运行
+ dist/server/win64         //后台程序 win32
+```
+
