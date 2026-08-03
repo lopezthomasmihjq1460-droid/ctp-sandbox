@@ -67,3 +67,11 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+.vscode
+.*.swap
+.*.swp
+/dist/obj
+/dist/server/**/tmpConn
+/dist/server/**/ctp_sandbox.db
+log
