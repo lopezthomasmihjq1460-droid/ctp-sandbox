@@ -6,6 +6,7 @@
 
 #include <stdio.h>
 
+#include "flow_control.h"
 #include "trade_api.h"
 #include "trade_spi.h"
 #include "trade_inf.h"
@@ -105,6 +106,8 @@ struct TradeHelperData
 
     CThostFtdcRspAuthenticateField RspAuthenticateField;
     int auth_requestID;
+
+    FlowControl_Data flow_control;
 };
 
 
@@ -315,6 +318,9 @@ TraderApiHelper::TraderApiHelper()
 
     m_data->package_len = 0;
 
+    Init_FlowControl(&m_data->flow_control);
+    Set_FlowControl(&m_data->flow_control,1000,1);
+
     multi_conn_set_callback(
         m_data->netCtx,
         (void (*)(MultiConnCtx * ctx, void*))mgr_on_connected,
@@ -436,23 +442,6 @@ void TraderApiHelper::RegisterSpi(CThostFtdcTraderSpi *pSpi)
 }
 
 
-//传输结构定义：
-/*
-{
-    len : 4 bytes bit,本消息总长度  (int) //包括自己和后面数据的总长度
-    func: 2 bytes bitAPI 函数编号   (unsigned short)
-    pn: : 2 bytes 参数个数          (unsigned short)
-    params:[
-        {
-            len: 2 bytes 参数长度
-            data: n bytes
-        }
-    ]
-}
-*/
-
-
-
 	///订阅私有流。
 	///@param nResumeType 私有流重传方式  
 	///        THOST_TERT_RESTART:从本交易日开始重传
@@ -489,30 +478,13 @@ void TraderApiHelper::SubscribePublicTopic(THOST_TE_RESUME_TYPE nResumeType)
 }
 
 
-	///客户端认证请求
-/*
-	///经纪公司代码
-	TThostFtdcBrokerIDType	BrokerID;
-	///用户代码
-	TThostFtdcUserIDType	UserID;
-	///用户端产品信息
-	TThostFtdcProductInfoType	UserProductInfo;
-	///App代码
-	TThostFtdcAppIDType	AppID;
-	///App类型
-	TThostFtdcAppTypeType	AppType;
------------------------------------------------------
-	TThostFtdcBrokerIDType	BrokerID;
-	///用户代码
-	TThostFtdcUserIDType	UserID;
-	///用户端产品信息
-	TThostFtdcProductInfoType	UserProductInfo;
-	///认证码
-	TThostFtdcAuthCodeType	AuthCode;
-	///App代码
-	TThostFtdcAppIDType	AppID;
+#define ApiHelper_ReqQry(func,Field) int TraderApiHelper::func(Field *pReqField, int nRequestID) \
+{\
+    if( Check_FlowControl(&m_data->flow_control) <= 0 )\
+        return -1;\
+    TradeApi_CallFuncRet(func)\
+}\
 
-*/
 
 int TraderApiHelper::ReqAuthenticate(CThostFtdcReqAuthenticateField *pReqField, int nRequestID) 
 {
@@ -632,10 +604,8 @@ int TraderApiHelper::ReqOrderAction(CThostFtdcInputOrderActionField *pReqField, 
 }
 
 	///查询最大报单数量请求
-int TraderApiHelper::ReqQryMaxOrderVolume(CThostFtdcQryMaxOrderVolumeField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryMaxOrderVolume)
-}
+
+ApiHelper_ReqQry(ReqQryMaxOrderVolume,CThostFtdcQryMaxOrderVolumeField)
 
 	///投资者结算结果确认
 int TraderApiHelper::ReqSettlementInfoConfirm(CThostFtdcSettlementInfoConfirmField *pReqField, int nRequestID) 
@@ -711,544 +681,288 @@ int TraderApiHelper::ReqCombActionInsert(CThostFtdcInputCombActionField *pReqFie
 }
 
 	///请求查询报单
-int TraderApiHelper::ReqQryOrder(CThostFtdcQryOrderField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryOrder)
-}
+
+ApiHelper_ReqQry(ReqQryOrder,CThostFtdcQryOrderField)
 
 	///请求查询成交
-int TraderApiHelper::ReqQryTrade(CThostFtdcQryTradeField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryTrade)
-}
+
+ApiHelper_ReqQry(ReqQryTrade,CThostFtdcQryTradeField)
+
 
 	///请求查询投资者持仓
-int TraderApiHelper::ReqQryInvestorPosition(CThostFtdcQryInvestorPositionField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryInvestorPosition)
-}
+ApiHelper_ReqQry(ReqQryInvestorPosition,CThostFtdcQryInvestorPositionField)
 
 	///请求查询资金账户
-int TraderApiHelper::ReqQryTradingAccount(CThostFtdcQryTradingAccountField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryTradingAccount)
-}
+ApiHelper_ReqQry(ReqQryTradingAccount,CThostFtdcQryTradingAccountField)    
+
 
 	///请求查询投资者
-int TraderApiHelper::ReqQryInvestor(CThostFtdcQryInvestorField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryInvestor)
-}
+ApiHelper_ReqQry(ReqQryInvestor,CThostFtdcQryInvestorField)
 
 	///请求查询交易编码
-int TraderApiHelper::ReqQryTradingCode(CThostFtdcQryTradingCodeField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryTradingCode)
-}
+ApiHelper_ReqQry(ReqQryTradingCode,CThostFtdcQryTradingCodeField)
 
 	///请求查询合约保证金率
-int TraderApiHelper::ReqQryInstrumentMarginRate(CThostFtdcQryInstrumentMarginRateField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryInstrumentMarginRate)
-}
+
+ApiHelper_ReqQry(ReqQryInstrumentMarginRate,CThostFtdcQryInstrumentMarginRateField)
 
 	///请求查询合约手续费率
-int TraderApiHelper::ReqQryInstrumentCommissionRate(CThostFtdcQryInstrumentCommissionRateField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryInstrumentCommissionRate)
-}
+ApiHelper_ReqQry(ReqQryInstrumentCommissionRate,CThostFtdcQryInstrumentCommissionRateField)    
 
 #ifdef CTP_6_7	
-int TraderApiHelper::ReqQryUserSession(CThostFtdcQryUserSessionField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryUserSession)
-}
+ApiHelper_ReqQry(ReqQryUserSession,CThostFtdcQryUserSessionField)
 #endif
 	///请求查询交易所
-int TraderApiHelper::ReqQryExchange(CThostFtdcQryExchangeField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryExchange)
-}
 
-	///请求查询产品
-int TraderApiHelper::ReqQryProduct(CThostFtdcQryProductField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryProduct)
-}
+ApiHelper_ReqQry(ReqQryExchange,CThostFtdcQryExchangeField)
 
-	///请求查询合约
-int TraderApiHelper::ReqQryInstrument(CThostFtdcQryInstrumentField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryInstrument)
-}
+//请求查询产品
+ApiHelper_ReqQry(ReqQryProduct,CThostFtdcQryProductField)
 
-	///请求查询行情
-int TraderApiHelper::ReqQryDepthMarketData(CThostFtdcQryDepthMarketDataField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryDepthMarketData)
-}
+///请求查询合约
+ApiHelper_ReqQry(ReqQryInstrument,CThostFtdcQryInstrumentField)
+
+///请求查询行情
+ApiHelper_ReqQry(ReqQryDepthMarketData,CThostFtdcQryDepthMarketDataField)
+
 #ifdef CTP_6_7
-int TraderApiHelper::ReqQryTraderOffer(CThostFtdcQryTraderOfferField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryTraderOffer)
-}
+ApiHelper_ReqQry(ReqQryTraderOffer,CThostFtdcQryTraderOfferField)
 #endif
-	///请求查询投资者结算结果
-int TraderApiHelper::ReqQrySettlementInfo(CThostFtdcQrySettlementInfoField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQrySettlementInfo)
-}
+///请求查询投资者结算结果
+ApiHelper_ReqQry(ReqQrySettlementInfo,CThostFtdcQrySettlementInfoField)
 
-	///请求查询转帐银行
-int TraderApiHelper::ReqQryTransferBank(CThostFtdcQryTransferBankField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryTransferBank)
-}
+//请求查询转帐银行
+ApiHelper_ReqQry(ReqQryTransferBank,CThostFtdcQryTransferBankField)
 
-	///请求查询投资者持仓明细
-int TraderApiHelper::ReqQryInvestorPositionDetail(CThostFtdcQryInvestorPositionDetailField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryInvestorPositionDetail)
-}
+///请求查询投资者持仓明细
+ApiHelper_ReqQry(ReqQryInvestorPositionDetail,CThostFtdcQryInvestorPositionDetailField)
 
-	///请求查询客户通知
-int TraderApiHelper::ReqQryNotice(CThostFtdcQryNoticeField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryNotice)
-}
+///请求查询客户通知
+ApiHelper_ReqQry(ReqQryNotice,CThostFtdcQryNoticeField)
 
-	///请求查询结算信息确认
-int TraderApiHelper::ReqQrySettlementInfoConfirm(CThostFtdcQrySettlementInfoConfirmField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQrySettlementInfoConfirm)
-}
+//请求查询结算信息确认
+ApiHelper_ReqQry(ReqQrySettlementInfoConfirm,CThostFtdcQrySettlementInfoConfirmField)
 
-	///请求查询投资者持仓明细
-int TraderApiHelper::ReqQryInvestorPositionCombineDetail(CThostFtdcQryInvestorPositionCombineDetailField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryInvestorPositionCombineDetail)
-}
+//请求查询投资者持仓明细
+ApiHelper_ReqQry(ReqQryInvestorPositionCombineDetail,CThostFtdcQryInvestorPositionCombineDetailField)
 
-	///请求查询保证金监管系统经纪公司资金账户密钥
-int TraderApiHelper::ReqQryCFMMCTradingAccountKey(CThostFtdcQryCFMMCTradingAccountKeyField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryCFMMCTradingAccountKey)
-}
+//请求查询保证金监管系统经纪公司资金账户密钥
+ApiHelper_ReqQry(ReqQryCFMMCTradingAccountKey,CThostFtdcQryCFMMCTradingAccountKeyField)
 
-	///请求查询仓单折抵信息
-int TraderApiHelper::ReqQryEWarrantOffset(CThostFtdcQryEWarrantOffsetField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryEWarrantOffset)
-}
+//请求查询仓单折抵信息
+ApiHelper_ReqQry(ReqQryEWarrantOffset,CThostFtdcQryEWarrantOffsetField)
 
-	///请求查询投资者品种/跨品种保证金
-int TraderApiHelper::ReqQryInvestorProductGroupMargin(CThostFtdcQryInvestorProductGroupMarginField *pReqField, int nRequestID)
-{
-    TradeApi_CallFuncRet(ReqQryInvestorProductGroupMargin)
-}
+///请求查询投资者品种/跨品种保证金
+ApiHelper_ReqQry(ReqQryInvestorProductGroupMargin,CThostFtdcQryInvestorProductGroupMarginField)
 
-	///请求查询交易所保证金率
-int TraderApiHelper::ReqQryExchangeMarginRate(CThostFtdcQryExchangeMarginRateField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryExchangeMarginRate)
-}
 
-	///请求查询交易所调整保证金率
-int TraderApiHelper::ReqQryExchangeMarginRateAdjust(CThostFtdcQryExchangeMarginRateAdjustField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryExchangeMarginRateAdjust)
-}
+//请求查询交易所保证金率
+ApiHelper_ReqQry(ReqQryExchangeMarginRate,CThostFtdcQryExchangeMarginRateField)
 
-	///请求查询汇率
-int TraderApiHelper::ReqQryExchangeRate(CThostFtdcQryExchangeRateField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryExchangeRate)
-}
+//请求查询交易所调整保证金率
+ApiHelper_ReqQry(ReqQryExchangeMarginRateAdjust,CThostFtdcQryExchangeMarginRateAdjustField)
 
-	///请求查询二级代理操作员银期权限
-int TraderApiHelper::ReqQrySecAgentACIDMap(CThostFtdcQrySecAgentACIDMapField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQrySecAgentACIDMap)
-}
 
-	///请求查询产品报价汇率
-int TraderApiHelper::ReqQryProductExchRate(CThostFtdcQryProductExchRateField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryProductExchRate)
-}
+//请求查询汇率
+ApiHelper_ReqQry(ReqQryExchangeRate,CThostFtdcQryExchangeRateField)
+
+//请求查询二级代理操作员银期权限
+ApiHelper_ReqQry(ReqQryProductExchRate,CThostFtdcQryProductExchRateField)
+
+///请求查询产品报价汇率
+ApiHelper_ReqQry(ReqQrySecAgentACIDMap,CThostFtdcQrySecAgentACIDMapField)
 
 	///请求查询产品组
-int TraderApiHelper::ReqQryProductGroup(CThostFtdcQryProductGroupField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryProductGroup)
-}
+ApiHelper_ReqQry(ReqQryProductGroup,CThostFtdcQryProductGroupField)
 
-	///请求查询做市商合约手续费率
-int TraderApiHelper::ReqQryMMInstrumentCommissionRate(CThostFtdcQryMMInstrumentCommissionRateField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryMMInstrumentCommissionRate)
-}
+///请求查询做市商合约手续费率
+ApiHelper_ReqQry(ReqQryMMInstrumentCommissionRate,CThostFtdcQryMMInstrumentCommissionRateField)
 
-	///请求查询做市商期权合约手续费
-int TraderApiHelper::ReqQryMMOptionInstrCommRate(CThostFtdcQryMMOptionInstrCommRateField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryMMOptionInstrCommRate)
-}
+///请求查询做市商期权合约手续费
+ApiHelper_ReqQry(ReqQryMMOptionInstrCommRate,CThostFtdcQryMMOptionInstrCommRateField)
 
-	///请求查询报单手续费
-int TraderApiHelper::ReqQryInstrumentOrderCommRate(CThostFtdcQryInstrumentOrderCommRateField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryInstrumentOrderCommRate)
-}
+///请求查询报单手续费
+ApiHelper_ReqQry(ReqQryInstrumentOrderCommRate,CThostFtdcQryInstrumentOrderCommRateField)
 
-	///请求查询资金账户
-int TraderApiHelper::ReqQrySecAgentTradingAccount(CThostFtdcQryTradingAccountField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQrySecAgentTradingAccount)
-}
+//请求查询资金账户
+ApiHelper_ReqQry(ReqQrySecAgentTradingAccount,CThostFtdcQryTradingAccountField)
 
-	///请求查询二级代理商资金校验模式
-int TraderApiHelper::ReqQrySecAgentCheckMode(CThostFtdcQrySecAgentCheckModeField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQrySecAgentCheckMode)
-}
+///请求查询二级代理商资金校验模式
+ApiHelper_ReqQry(ReqQrySecAgentCheckMode,CThostFtdcQrySecAgentCheckModeField)
 
-	///请求查询二级代理商信息
-int TraderApiHelper::ReqQrySecAgentTradeInfo(CThostFtdcQrySecAgentTradeInfoField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQrySecAgentTradeInfo)   
-}
 
-	///请求查询期权交易成本
-int TraderApiHelper::ReqQryOptionInstrTradeCost(CThostFtdcQryOptionInstrTradeCostField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryOptionInstrTradeCost)
-}
+//请求查询二级代理商信息
+ApiHelper_ReqQry(ReqQrySecAgentTradeInfo,CThostFtdcQrySecAgentTradeInfoField)
 
-	///请求查询期权合约手续费
-int TraderApiHelper::ReqQryOptionInstrCommRate(CThostFtdcQryOptionInstrCommRateField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryOptionInstrCommRate)
-}
 
-	///请求查询执行宣告
-int TraderApiHelper::ReqQryExecOrder(CThostFtdcQryExecOrderField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryExecOrder)
-}
+//请求查询期权交易成本
+ApiHelper_ReqQry(ReqQryOptionInstrTradeCost,CThostFtdcQryOptionInstrTradeCostField)
 
-	///请求查询询价
-int TraderApiHelper::ReqQryForQuote(CThostFtdcQryForQuoteField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryForQuote)
-}
+///请求查询期权合约手续费
+ApiHelper_ReqQry(ReqQryOptionInstrCommRate,CThostFtdcQryOptionInstrCommRateField)
 
-	///请求查询报价
-int TraderApiHelper::ReqQryQuote(CThostFtdcQryQuoteField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryQuote)
-}
 
-	///请求查询期权自对冲
-int TraderApiHelper::ReqQryOptionSelfClose(CThostFtdcQryOptionSelfCloseField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryOptionSelfClose)
-}
+///请求查询执行宣告
+ApiHelper_ReqQry(ReqQryExecOrder,CThostFtdcQryExecOrderField)
 
-	///请求查询投资单元
-int TraderApiHelper::ReqQryInvestUnit(CThostFtdcQryInvestUnitField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryInvestUnit)
-}
+//请求查询询价
+ApiHelper_ReqQry(ReqQryForQuote,CThostFtdcQryForQuoteField)
 
-	///请求查询组合合约安全系数
-int TraderApiHelper::ReqQryCombInstrumentGuard(CThostFtdcQryCombInstrumentGuardField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryCombInstrumentGuard)
-}
 
-	///请求查询申请组合
-int TraderApiHelper::ReqQryCombAction(CThostFtdcQryCombActionField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryCombAction)
-}
+//请求查询报价
+ApiHelper_ReqQry(ReqQryQuote,CThostFtdcQryQuoteField)
 
-	///请求查询转帐流水
-int TraderApiHelper::ReqQryTransferSerial(CThostFtdcQryTransferSerialField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryTransferSerial)
-}
+//请求查询期权自对冲
+ApiHelper_ReqQry(ReqQryOptionSelfClose,CThostFtdcQryOptionSelfCloseField)
 
-	///请求查询银期签约关系
-int TraderApiHelper::ReqQryAccountregister(CThostFtdcQryAccountregisterField *pReqField, int nRequestID) 
-{  
-    TradeApi_CallFuncRet(ReqQryAccountregister)
-}
+//请求查询投资单元
+ApiHelper_ReqQry(ReqQryInvestUnit,CThostFtdcQryInvestUnitField)
 
-	///请求查询签约银行
-int TraderApiHelper::ReqQryContractBank(CThostFtdcQryContractBankField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryContractBank)
-}
+//请求查询组合合约安全系数
+ApiHelper_ReqQry(ReqQryCombInstrumentGuard,CThostFtdcQryCombInstrumentGuardField)
 
-	///请求查询预埋单
-int TraderApiHelper::ReqQryParkedOrder(CThostFtdcQryParkedOrderField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryParkedOrder)
-}
+//请求查询申请组合
+ApiHelper_ReqQry(ReqQryCombAction,CThostFtdcQryCombActionField)
 
-	///请求查询预埋撤单
-int TraderApiHelper::ReqQryParkedOrderAction(CThostFtdcQryParkedOrderActionField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryParkedOrderAction)
-}
+//请求查询转帐流水
+ApiHelper_ReqQry(ReqQryTransferSerial,CThostFtdcQryTransferSerialField)
 
-	///请求查询交易通知
-int TraderApiHelper::ReqQryTradingNotice(CThostFtdcQryTradingNoticeField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryTradingNotice)
-}
+//请求查询银期签约关系
+ApiHelper_ReqQry(ReqQryAccountregister,CThostFtdcQryAccountregisterField)
 
-	///请求查询经纪公司交易参数
-int TraderApiHelper::ReqQryBrokerTradingParams(CThostFtdcQryBrokerTradingParamsField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryBrokerTradingParams)
-}
+//请求查询签约银行
+ApiHelper_ReqQry(ReqQryContractBank,CThostFtdcQryContractBankField)
 
-	///请求查询经纪公司交易算法
-int TraderApiHelper::ReqQryBrokerTradingAlgos(CThostFtdcQryBrokerTradingAlgosField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryBrokerTradingAlgos)
-}
+//请求查询预埋单
+ApiHelper_ReqQry(ReqQryParkedOrder,CThostFtdcQryParkedOrderField)
 
-	///请求查询监控中心用户令牌
-int TraderApiHelper::ReqQueryCFMMCTradingAccountToken(CThostFtdcQueryCFMMCTradingAccountTokenField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQueryCFMMCTradingAccountToken)
-}
+//请求查询预埋撤单
+ApiHelper_ReqQry(ReqQryParkedOrderAction,CThostFtdcQryParkedOrderActionField)
 
-	///期货发起银行资金转期货请求
-int TraderApiHelper::ReqFromBankToFutureByFuture(CThostFtdcReqTransferField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqFromBankToFutureByFuture)
-}
+//请求查询交易通知
+ApiHelper_ReqQry(ReqQryTradingNotice,CThostFtdcQryTradingNoticeField)
 
-	///期货发起期货资金转银行请求
-int TraderApiHelper::ReqFromFutureToBankByFuture(CThostFtdcReqTransferField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqFromFutureToBankByFuture)
-}
+//请求查询经纪公司交易参数
+ApiHelper_ReqQry(ReqQryBrokerTradingParams,CThostFtdcQryBrokerTradingParamsField)
 
-	///期货发起查询银行余额请求
-int TraderApiHelper::ReqQueryBankAccountMoneyByFuture(CThostFtdcReqQueryAccountField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQueryBankAccountMoneyByFuture)
-}
+//请求查询经纪公司交易算法
+ApiHelper_ReqQry(ReqQryBrokerTradingAlgos,CThostFtdcQryBrokerTradingAlgosField)
 
-	///请求查询分类合约
-int TraderApiHelper::ReqQryClassifiedInstrument(CThostFtdcQryClassifiedInstrumentField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryClassifiedInstrument)
-}
+//请求查询监控中心用户令牌
+ApiHelper_ReqQry(ReqQueryCFMMCTradingAccountToken,CThostFtdcQueryCFMMCTradingAccountTokenField)
 
-	///请求组合优惠比例
-int TraderApiHelper::ReqQryCombPromotionParam(CThostFtdcQryCombPromotionParamField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryCombPromotionParam)
-}
+//期货发起银行资金转期货请求
+ApiHelper_ReqQry(ReqFromBankToFutureByFuture,CThostFtdcReqTransferField)
 
-	///投资者风险结算持仓查询
-int TraderApiHelper::ReqQryRiskSettleInvstPosition(CThostFtdcQryRiskSettleInvstPositionField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryRiskSettleInvstPosition)
-}
+//期货发起期货资金转银行请求
+ApiHelper_ReqQry(ReqFromFutureToBankByFuture,CThostFtdcReqTransferField)
 
-	///风险结算产品查询
-int TraderApiHelper::ReqQryRiskSettleProductStatus(CThostFtdcQryRiskSettleProductStatusField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryRiskSettleProductStatus)
-}
+//期货发起查询银行余额请求
+ApiHelper_ReqQry(ReqQueryBankAccountMoneyByFuture,CThostFtdcReqQueryAccountField)
+
+//请求查询分类合约
+ApiHelper_ReqQry(ReqQryClassifiedInstrument,CThostFtdcQryClassifiedInstrumentField)
+
+//请求组合优惠比例
+ApiHelper_ReqQry(ReqQryCombPromotionParam,CThostFtdcQryCombPromotionParamField)
+
+///投资者风险结算持仓查询
+ApiHelper_ReqQry(ReqQryRiskSettleInvstPosition,CThostFtdcQryRiskSettleInvstPositionField)
+
+//风险结算产品查询
+ApiHelper_ReqQry(ReqQryRiskSettleProductStatus,CThostFtdcQryRiskSettleProductStatusField)
+
 
 #ifdef CTP_6_7
 
 ///SPBM期货合约参数查询
-int TraderApiHelper::ReqQrySPBMFutureParameter(CThostFtdcQrySPBMFutureParameterField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQrySPBMFutureParameter)
-}
+ApiHelper_ReqQry(ReqQrySPBMFutureParameter,CThostFtdcQrySPBMFutureParameterField)
 
-	///SPBM期权合约参数查询
-int TraderApiHelper::ReqQrySPBMOptionParameter(CThostFtdcQrySPBMOptionParameterField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQrySPBMOptionParameter)
-}
+//SPBM期权合约参数查询
+ApiHelper_ReqQry(ReqQrySPBMOptionParameter,CThostFtdcQrySPBMOptionParameterField)
 
-	///SPBM品种内对锁仓折扣参数查询
-int TraderApiHelper::ReqQrySPBMIntraParameter(CThostFtdcQrySPBMIntraParameterField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQrySPBMIntraParameter)
-}
+//SPBM品种内对锁仓折扣参数查询
+ApiHelper_ReqQry(ReqQrySPBMIntraParameter,CThostFtdcQrySPBMIntraParameterField)
 
-	///SPBM跨品种抵扣参数查询
-int TraderApiHelper::ReqQrySPBMInterParameter(CThostFtdcQrySPBMInterParameterField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQrySPBMInterParameter)
-}
+//SPBM跨品种抵扣参数查询
+ApiHelper_ReqQry(ReqQrySPBMInterParameter,CThostFtdcQrySPBMInterParameterField)
 
-	///SPBM组合保证金套餐查询
-int TraderApiHelper::ReqQrySPBMPortfDefinition(CThostFtdcQrySPBMPortfDefinitionField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQrySPBMPortfDefinition)
-}
+//SPBM组合保证金套餐查询
+ApiHelper_ReqQry(ReqQrySPBMPortfDefinition,CThostFtdcQrySPBMPortfDefinitionField)
 
-	///投资者SPBM套餐选择查询
-int TraderApiHelper::ReqQrySPBMInvestorPortfDef(CThostFtdcQrySPBMInvestorPortfDefField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQrySPBMInvestorPortfDef)
-}
+//投资者SPBM套餐选择查询
+ApiHelper_ReqQry(ReqQrySPBMInvestorPortfDef,CThostFtdcQrySPBMInvestorPortfDefField)
 
-	///投资者新型组合保证金系数查询
-int TraderApiHelper::ReqQryInvestorPortfMarginRatio(CThostFtdcQryInvestorPortfMarginRatioField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryInvestorPortfMarginRatio)
-}
+//投资者新型组合保证金系数查询
+ApiHelper_ReqQry(ReqQryInvestorPortfMarginRatio,CThostFtdcQryInvestorPortfMarginRatioField)
 
-	///投资者产品SPBM明细查询
-int TraderApiHelper::ReqQryInvestorProdSPBMDetail(CThostFtdcQryInvestorProdSPBMDetailField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryInvestorProdSPBMDetail)
-}
+//投资者产品SPBM明细查询
+ApiHelper_ReqQry(ReqQryInvestorProdSPBMDetail,CThostFtdcQryInvestorProdSPBMDetailField)
 
-	///投资者商品组SPMM记录查询
-int TraderApiHelper::ReqQryInvestorCommoditySPMMMargin(CThostFtdcQryInvestorCommoditySPMMMarginField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryInvestorCommoditySPMMMargin)
-}
+//投资者商品组SPMM记录查询
+ApiHelper_ReqQry(ReqQryInvestorCommoditySPMMMargin,CThostFtdcQryInvestorCommoditySPMMMarginField)
 
-	///投资者商品群SPMM记录查询
-int TraderApiHelper::ReqQryInvestorCommodityGroupSPMMMargin(CThostFtdcQryInvestorCommodityGroupSPMMMarginField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryInvestorCommodityGroupSPMMMargin)
-}
+//投资者商品群SPMM记录查询
+ApiHelper_ReqQry(ReqQryInvestorCommodityGroupSPMMMargin,CThostFtdcQryInvestorCommodityGroupSPMMMarginField)
 
-	///SPMM合约参数查询
-int TraderApiHelper::ReqQrySPMMInstParam(CThostFtdcQrySPMMInstParamField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQrySPMMInstParam)
-}
+//SPMM合约参数查询
+ApiHelper_ReqQry(ReqQrySPMMInstParam,CThostFtdcQrySPMMInstParamField)
 
-	///SPMM产品参数查询
-int TraderApiHelper::ReqQrySPMMProductParam(CThostFtdcQrySPMMProductParamField *pReqField, int nRequestID)  
-{
-    TradeApi_CallFuncRet(ReqQrySPMMProductParam)
-}
+//SPMM产品参数查询
+ApiHelper_ReqQry(ReqQrySPMMProductParam,CThostFtdcQrySPMMProductParamField)
 
-	///SPBM附加跨品种抵扣参数查询
-int TraderApiHelper::ReqQrySPBMAddOnInterParameter(CThostFtdcQrySPBMAddOnInterParameterField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQrySPBMAddOnInterParameter)
-}
+//SPBM附加跨品种抵扣参数查询
+ApiHelper_ReqQry(ReqQrySPBMAddOnInterParameter,CThostFtdcQrySPBMAddOnInterParameterField)
 
-	///RCAMS产品组合信息查询
-int TraderApiHelper::ReqQryRCAMSCombProductInfo(CThostFtdcQryRCAMSCombProductInfoField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryRCAMSCombProductInfo)
-}
+//RCAMS产品组合信息查询
+ApiHelper_ReqQry(ReqQryRCAMSCombProductInfo,CThostFtdcQryRCAMSCombProductInfoField)
 
-	///RCAMS同合约风险对冲参数查询
-int TraderApiHelper::ReqQryRCAMSInstrParameter(CThostFtdcQryRCAMSInstrParameterField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryRCAMSInstrParameter)
-}
+//RCAMS同合约风险对冲参数查询
+ApiHelper_ReqQry(ReqQryRCAMSInstrParameter,CThostFtdcQryRCAMSInstrParameterField)
 
-	///RCAMS品种内风险对冲参数查询
-int TraderApiHelper::ReqQryRCAMSIntraParameter(CThostFtdcQryRCAMSIntraParameterField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryRCAMSIntraParameter)
-}
+//RCAMS品种内风险对冲参数查询
+ApiHelper_ReqQry(ReqQryRCAMSIntraParameter,CThostFtdcQryRCAMSIntraParameterField)
 
-	///RCAMS跨品种风险折抵参数查询
-int TraderApiHelper::ReqQryRCAMSInterParameter(CThostFtdcQryRCAMSInterParameterField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryRCAMSInterParameter)
-}
+//RCAMS跨品种风险折抵参数查询
+ApiHelper_ReqQry(ReqQryRCAMSInterParameter,CThostFtdcQryRCAMSInterParameterField)
 
-	///RCAMS空头期权风险调整参数查询
-int TraderApiHelper::ReqQryRCAMSShortOptAdjustParam(CThostFtdcQryRCAMSShortOptAdjustParamField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryRCAMSShortOptAdjustParam)
-}
+//RCAMS空头期权风险调整参数查询
+ApiHelper_ReqQry(ReqQryRCAMSShortOptAdjustParam,CThostFtdcQryRCAMSShortOptAdjustParamField)
 
-	///RCAMS策略组合持仓查询
-int TraderApiHelper::ReqQryRCAMSInvestorCombPosition(CThostFtdcQryRCAMSInvestorCombPositionField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryRCAMSInvestorCombPosition)
-}
+//RCAMS策略组合持仓查询
+ApiHelper_ReqQry(ReqQryRCAMSInvestorCombPosition,CThostFtdcQryRCAMSInvestorCombPositionField)
 
-	///投资者品种RCAMS保证金查询
-int TraderApiHelper::ReqQryInvestorProdRCAMSMargin(CThostFtdcQryInvestorProdRCAMSMarginField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryInvestorProdRCAMSMargin)
-}
+//投资者品种RCAMS保证金查询
+ApiHelper_ReqQry(ReqQryInvestorProdRCAMSMargin,CThostFtdcQryInvestorProdRCAMSMarginField)
 
-	///RULE合约保证金参数查询
-int TraderApiHelper::ReqQryRULEInstrParameter(CThostFtdcQryRULEInstrParameterField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryRULEInstrParameter)
-}
+//RULE合约保证金参数查询
+ApiHelper_ReqQry(ReqQryRULEInstrParameter,CThostFtdcQryRULEInstrParameterField)
 
-	///RULE品种内对锁仓折扣参数查询
-int TraderApiHelper::ReqQryRULEIntraParameter(CThostFtdcQryRULEIntraParameterField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryRULEIntraParameter)
-}
+//RULE品种内对锁仓折扣参数查询
+ApiHelper_ReqQry(ReqQryRULEIntraParameter,CThostFtdcQryRULEIntraParameterField)
 
-	///RULE跨品种抵扣参数查询
-int TraderApiHelper::ReqQryRULEInterParameter(CThostFtdcQryRULEInterParameterField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryRULEInterParameter)
-}
+//RULE跨品种抵扣参数查询
+ApiHelper_ReqQry(ReqQryRULEInterParameter,CThostFtdcQryRULEInterParameterField)
 
-	///投资者产品RULE保证金查询
-int TraderApiHelper::ReqQryInvestorProdRULEMargin(CThostFtdcQryInvestorProdRULEMarginField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryInvestorProdRULEMargin)
-}
+//投资者产品RULE保证金查询
+ApiHelper_ReqQry(ReqQryInvestorProdRULEMargin,CThostFtdcQryInvestorProdRULEMarginField)
 
-	///投资者新型组合保证金开关查询
-int TraderApiHelper::ReqQryInvestorPortfSetting(CThostFtdcQryInvestorPortfSettingField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryInvestorPortfSetting)
-}
+//投资者新型组合保证金开关查询
+ApiHelper_ReqQry(ReqQryInvestorPortfSetting,CThostFtdcQryInvestorPortfSettingField)
 
-	///投资者申报费阶梯收取记录查询
-int TraderApiHelper::ReqQryInvestorInfoCommRec(CThostFtdcQryInvestorInfoCommRecField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryInvestorInfoCommRec)
-}
+//投资者申报费阶梯收取记录查询
+ApiHelper_ReqQry(ReqQryInvestorInfoCommRec,CThostFtdcQryInvestorInfoCommRecField)
 
-	///组合腿信息查询
-int TraderApiHelper::ReqQryCombLeg(CThostFtdcQryCombLegField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryCombLeg)
-}
+//组合腿信息查询
+ApiHelper_ReqQry(ReqQryCombLeg,CThostFtdcQryCombLegField)
 
-	///对冲设置请求
-int TraderApiHelper::ReqOffsetSetting(CThostFtdcInputOffsetSettingField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqOffsetSetting)
-}
+//对冲设置请求
+ApiHelper_ReqQry(ReqOffsetSetting,CThostFtdcInputOffsetSettingField)
 
-	///对冲设置撤销请求
-int TraderApiHelper::ReqCancelOffsetSetting(CThostFtdcInputOffsetSettingField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqCancelOffsetSetting)
-}
+//对冲设置撤销请求
+ApiHelper_ReqQry(ReqCancelOffsetSetting,CThostFtdcInputOffsetSettingField)
 
-	///投资者对冲设置查询
-int TraderApiHelper::ReqQryOffsetSetting(CThostFtdcQryOffsetSettingField *pReqField, int nRequestID) 
-{
-    TradeApi_CallFuncRet(ReqQryOffsetSetting)
-}
+//投资者对冲设置查询
+ApiHelper_ReqQry(ReqQryOffsetSetting,CThostFtdcQryOffsetSettingField)
 
 #endif

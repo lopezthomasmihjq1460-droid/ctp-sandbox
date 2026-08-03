@@ -86,7 +86,7 @@ static void graceful_shutdown(void)
 // ===================== JSON配置加载 =====================
 static int load_config_from_db(const char *dbfile)
 {
-    int nRet = sqlite3_open_v2(dbfile, &g_cfg_db,SQLITE_OPEN_READONLY ,NULL);
+    int nRet = sqlite3_open_v2(dbfile, &g_cfg_db,SQLITE_OPEN_READWRITE ,NULL);
     if (nRet != SQLITE_OK)
 	{
 		printf("配置数据库 %s 打开失败,ret = %d\n",dbfile,nRet);

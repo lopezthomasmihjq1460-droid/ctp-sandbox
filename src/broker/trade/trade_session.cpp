@@ -165,17 +165,24 @@ int TradeSession::ReadPackage(struct evbuffer *in_buf,PackageData * data)
         readable -= read_len;
 
         if( data->package.header.func_id >= Api_Count )
-            break; //这里一定出错了
-        if( data->package.header.p_cnt > 8 )
         {
+            printf("===> data->package.header.func_id =%d !!!!!\n",data->package.header.func_id);
             break; //这里一定出错了
         }
 
         TradeApi_FunctionInfo * callback = &api_function_list[data->package.header.func_id];
-        printf("===> %s\n",callback->name);
+        if( data->package.header.p_cnt > 8 )
+        {
+            printf("===> %s , p_cnt = %d !!!!!\n",callback->name,data->package.header.p_cnt);
+            break; //这里一定出错了
+        }
+
 
         if( callback->p_cnt != data->package.header.p_cnt )
+        {
+            printf("===> %s , p_cnt = %d !!!!!\n",callback->name,data->package.header.p_cnt);
             break; //参数数量不匹配，这里一定出错了
+        }
 
         //解析返回数据，调用回调函数
         //目前最多只有4个参数
@@ -183,39 +190,40 @@ int TradeSession::ReadPackage(struct evbuffer *in_buf,PackageData * data)
         int offset = TradeApi_Header_Size;
         char * ptr = data->package.data + offset;
 
+        unsigned short p0_size = 0;
+
         if( data->package.header.p_cnt > 0 )
         {
-            unsigned short param_len = *((unsigned short *)ptr);
+            p0_size = *((unsigned short *)ptr);
              offset += sizeof(unsigned short);
-            if( (param_len + offset) > data->package.header.total_len )
+            if( (p0_size + offset) > data->package.header.total_len )
             {
                 return readable; //这里一定出错了
             }
             ptr += sizeof(unsigned short);
-            if( param_len == 0 )
+            if( p0_size == 0 )
             {
                 data->param[0].ptr = nullptr;
                 data->param[0].len = 0;
             }
-            else if( param_len < callback->psize[0] )
+            else if( p0_size < callback->psize[0] )
             {
                 memset(buffer_ext ,0,callback->psize[0]);
-
-                memcpy(buffer_ext,ptr,param_len);
-                memset(buffer_ext + param_len,0,callback->psize[0] - param_len);
+                memcpy(buffer_ext,ptr,p0_size);
+                memset(buffer_ext + p0_size,0,callback->psize[0] - p0_size);
                 data->param[0].len = callback->psize[0];
                 data->param[0].ptr = buffer_ext;
 
-                printf("%s need size=%d ,recv size = %d\n",callback->name,callback->psize[0],param_len);
+                //printf("%s need size=%d ,recv size = %d\n",callback->name,callback->psize[0],p0_size);
                 // return readable;
             }
             else
             {
-                data->param[0].len = param_len;
+                data->param[0].len = p0_size;
                 data->param[0].ptr = ptr;       
             }
-            offset += param_len;
-            ptr += param_len;            
+            offset += p0_size;
+            ptr += p0_size;            
         }
     
         for(int i=1; i< data->package.header.p_cnt; i++)
@@ -264,7 +272,7 @@ int TradeSession::ReadPackage(struct evbuffer *in_buf,PackageData * data)
         {
             strncpy(data->param[0].ptr + callback->AccountID,broker.account.c_str(),sizeof(TThostFtdcAccountIDType) -1);
         }
-        printf("call %s !!!!!\n",callback->name);
+        printf("===>Field Len=%3d,need =%3d , %s\n", p0_size,callback->psize[0],callback->name);
         funcArr[callback->is_precheck][callback->p_cnt](this,callback);
     }while(0);
     return readable;
@@ -515,6 +523,49 @@ bool TradeSession::CheckSelfDeal(const char * instrument_id,double price,int dir
     }    
     return true;
 }
+
+
+int TradeSession::ReqUserPasswordUpdate(CThostFtdcUserPasswordUpdateField *pUserPasswordUpdate, int nRequestID)
+{
+    CThostFtdcRspInfoField RspInfo = {0};
+    RspInfo.ErrorID = 406;
+    do
+    {
+	    if( !g_cfg_db )
+            break;
+        sqlite3_stmt *stmt_update_pwd = 0;
+		sqlite3_prepare_v2(g_cfg_db, "update t_account set pwd01 = ? where id=? and pwd01=?",  -1, &stmt_update_pwd, 0);
+        if( !stmt_update_pwd )
+            break;
+        sqlite3_bind_text(stmt_update_pwd, 1, pUserPasswordUpdate->NewPassword, -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt_update_pwd, 2, pUserPasswordUpdate->UserID, -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt_update_pwd, 3, pUserPasswordUpdate->OldPassword, -1, SQLITE_STATIC);
+
+        int ret = sqlite3_step(stmt_update_pwd);
+        int changed = sqlite3_changes(g_cfg_db);
+        sqlite3_finalize(stmt_update_pwd);
+
+        if( changed != 1 )
+            break;
+        RspInfo.ErrorID = 0;
+        sqlite3_exec(g_cfg_db,"commit;",0,0,0);
+
+    }while(0);
+    
+    m_spi->OnRspUserPasswordUpdate(pUserPasswordUpdate, &RspInfo, nRequestID, true) ;
+    return 0;
+}
+
+int TradeSession::ReqTradingAccountPasswordUpdate(CThostFtdcTradingAccountPasswordUpdateField *pTradingAccountPasswordUpdate, int nRequestID) 
+{
+    CThostFtdcTradingAccountPasswordUpdateField RspField = {0};
+    CThostFtdcRspInfoField RspInfo = {0};
+    RspInfo.ErrorID = 501;
+    snprintf(RspInfo.ErrorMsg,sizeof(RspInfo.ErrorMsg) -1,"%s","不支持的操作");
+    m_spi->OnRspTradingAccountPasswordUpdate(pTradingAccountPasswordUpdate, &RspInfo, nRequestID, true) ;
+    return 0;
+}
+
 
 int TradeSession::ReqOrderInsert(CThostFtdcInputOrderField *pInputOrder, int nRequestID)
 {
