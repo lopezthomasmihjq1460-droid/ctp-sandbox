@@ -1,0 +1,61 @@
+CTP_6.7=./depend/ctp/v6.7.11/include/
+CTP_6.6=./depend/ctp/ThostApi6.6.1P/include/
+
+PRO_SRC=$(foreach dir,src/broker/trade/,$(wildcard $(dir)/*.cpp))
+PRO_DEPS := $(PRO_SRC:%.cpp=%.d)
+PRO_OBJS := $(PRO_DEPS:%.d=%.o)
+
+PRO_OUT_PATH=./dist/obj/server
+
+OBJS_NODIR := $(notdir $(PRO_OBJS))
+
+P_DEBUG_OBJS := $(addprefix $(PRO_OUT_PATH)/debug/,$(OBJS_NODIR)) 
+
+P_RELEASE_OBJS := $(addprefix $(PRO_OUT_PATH)/release/,$(OBJS_NODIR)) 
+
+PRO_OBJ_debug=./dist/server/debug/ctp_sandbox.exe
+PRO_OBJ_release=./dist/server/release/ctp_sandbox.exe
+
+
+TARGET_OBJ_DEBUG := dist/obj/server/debug/
+TARGET_OBJ_RELEASE := dist/obj/server/release/
+TARGET_DEBUG := dist/server/debug/
+TARGET_RELEASE := dist/server/release/
+
+all: debug release
+
+debug: $(TARGET_OBJ_DEBUG) $(TARGET_DEBUG) $(PRO_OBJ_debug)
+
+release: $(TARGET_OBJ_RELEASE) $(TARGET_RELEASE) $(PRO_OBJ_release)
+
+$(PRO_OBJ_debug) : $(P_DEBUG_OBJS) 
+	g++ -I$(CTP_6.7) -Wl,-rpath,./ -g -fsanitize=address -o $@ $(P_DEBUG_OBJS) -levent -levent_pthreads -lsqlite3
+
+dist/obj/server/debug/%.o: src/broker/trade/%.cpp
+	gcc -I$(CTP_6.7) -I./src/public -g -fsanitize=address -c $< -o $@
+
+$(PRO_OBJ_release) : $(P_RELEASE_OBJS) 
+	g++ -I$(CTP_6.7) -Wl,-rpath,./ -O3 -o $@ $(P_RELEASE_OBJS) -levent -levent_pthreads -lsqlite3
+
+dist/obj/server/release/%.o: src/broker/trade/%.cpp
+	gcc -I$(CTP_6.7) -I./src/public -O3 -c $< -o $@
+
+$(TARGET_OBJ_DEBUG):
+	@-mkdir -p $@
+
+$(TARGET_DEBUG):
+	@-mkdir -p $@
+
+$(TARGET_OBJ_RELEASE):
+	@-mkdir -p $@
+
+$(TARGET_RELEASE):
+	@-mkdir -p $@
+
+clean:
+	rm -rf $(P_DEBUG_OBJS) $(PRO_OBJ_debug)
+	rm -rf $(P_RELEASE_OBJS) $(PRO_OBJ_release)
+
+# 声明伪目标，不会和文件重名冲突
+.PHONY: clean
+
