@@ -1,23 +1,34 @@
 @echo off
 
-set PRO_NAME=thosttraderapi_se
-
-:: 宏定义
-set MACROS=/DWIN32 /DWIN64 /DLIB_TRADER_API_EXPORT /DISLIB
-
-chcp 936
+cp 65001
 set PYTHONIOENCODING=
 set OUTPUT_ENCODING=
 setlocal enabledelayedexpansion
+
+set CTP_VERSION=6.7.13
+
+:: 按 . 分割为 major minor patch
+for /f "delims=., tokens=1,2,3" %%a in ("%CTP_VERSION%") do (
+    set VER_MAJOR=%%a
+    set VER_MINOR=%%b
+    set VER_PATCH=%%c
+)
+
+:: 算术计算
+set /a CTP_VER=!VER_MAJOR!*1000000 + !VER_MINOR!*1000 + !VER_PATCH!
+
+echo !CTP_VER!
+
+set PRO_NAME=thosttraderapi_se
+
+:: 宏定义
+set MACROS=/DWIN32 /DWIN64 /DLIB_TRADER_API_EXPORT /DISLIB /DCTP_VER=!CTP_VER!
+
+
 
 :: 初始化VS2022 x64编译环境
 call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
 
-chcp 936
-set PYTHONIOENCODING=
-set OUTPUT_ENCODING=
-
-setlocal enabledelayedexpansion
 :: 目录配置
 
 set OBJ_DIR=..\dist\obj\
@@ -31,7 +42,7 @@ set RSP_FILE=%PRO_NAME%.rsp
 if not exist %OBJ_DIR% md %OBJ_DIR%
 if not exist %OUT_DIR% md %OUT_DIR%
 
-set INCLUDE_DIR=/I ../src/api/net /I../src/api/trade /I ../src/public /I../depend/event/include /I ..\depend\ctp\ThostApi6.6.1P\include
+set INCLUDE_DIR=/I ../src/api/net /I../src/api/trade /I ../src/public /I../depend/event/include /I ..\depend\ctp\v%CTP_VERSION%\include
 
 set LIBS=../depend/event/lib/vs64/event.lib  ws2_32.lib  advapi32.lib iphlpapi.lib
 
@@ -42,13 +53,15 @@ dir /b /s %OBJ_DIR%\*.obj > %PRO_NAME%.obj.rsp
 
 cl ^
 /c ^
+/O2 ^
+/MT ^
+/std:c++20 ^
+/EHsc ^
 %INCLUDE_DIR% ^
 %MACROS% ^
 /nologo ^
-/O2 ^
 /Fo%OBJ_DIR%\ ^
-@%RSP_FILE% ^
-
+@%RSP_FILE% 
 
 link ^
 /DLL ^

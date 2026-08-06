@@ -1,9 +1,15 @@
-CTP_6.7=./depend/ctp/v6.7.11/include/
-CTP_6.6=./depend/ctp/ThostApi6.6.1P/include/
 
-CTP_VERSION=CTP_6_7
+CTP_VERSION := 6.7.13
 
-CTP_INC=$(CTP_6.7)
+# 把点号替换成空格，变成列表：6 6 1
+CTP_VER_PARTS := $(subst ., ,$(CTP_VERSION))
+VER_MAJOR := $(word 1,$(CTP_VER_PARTS))
+VER_MINOR := $(word 2,$(CTP_VER_PARTS))
+VER_PATCH := $(word 3,$(CTP_VER_PARTS))
+# 计算数值：major*1000000 + minor*1000 + patch
+
+CTP_VER := $(shell echo $$(( $(VER_MAJOR)*1000000 + $(VER_MINOR)*1000 + $(VER_PATCH) )))
+CTP_INC := ./depend/ctp/v$(CTP_VERSION)/include/
 
 PRO_SRC=$(foreach dir,src/api/trade/,$(wildcard $(dir)/*.cpp))
 PRO_SRC_net=$(foreach dir,src/api/net/,$(wildcard $(dir)/*.cpp))
@@ -44,19 +50,19 @@ $(PRO_OBJ_debug) : $(P_DEBUG_OBJS_a) $(P_DEBUG_OBJS_b)
 	g++ -fPIC -Wl,-rpath,./ -shared -rdynamic  -Wl,--unresolved-symbols=ignore-in-shared-libs -Wl,-soname,thosttraderapi_se.so -g -o $@ $(P_DEBUG_OBJS_a) $(P_DEBUG_OBJS_b) -levent -levent_pthreads
 
 dist/obj/api/debug/%.o: src/api/trade/%.cpp
-	gcc -I$(CTP_INC) -D$(CTP_VERSION) -I./src/public -I./src/api/net  -fPIC -fvisibility=hidden -fvisibility-inlines-hidden -g -c $< -o $@
+	gcc -I$(CTP_INC) -DCTP_VER=$(CTP_VER) -I./src/public -I./src/api/net  -fPIC -fvisibility=hidden -fvisibility-inlines-hidden -g -c $< -o $@
 
 dist/obj/api/debug/net/%.o: src/api/net/%.cpp
-	gcc -I$(CTP_INC) -D$(CTP_VERSION) -I./src/public -I./src/api/net  -fPIC -fvisibility=hidden -fvisibility-inlines-hidden -g -c $< -o $@
+	gcc -I$(CTP_INC) -DCTP_VER=$(CTP_VER) -I./src/public -I./src/api/net  -fPIC -fvisibility=hidden -fvisibility-inlines-hidden -g -c $< -o $@
 
 $(PRO_OBJ_release) : $(P_RELEASE_OBJS_a) $(P_RELEASE_OBJS_b)
 	g++ -Wl,-rpath,./ -shared -rdynamic  -Wl,--unresolved-symbols=ignore-in-shared-libs -Wl,-soname,thosttraderapi_se.so -O3 -o $@ $(P_DEBUG_OBJS_a) $(P_DEBUG_OBJS_b) -levent -levent_pthreads 
 
 dist/obj/api/release/%.o: src/api/trade/%.cpp
-	gcc -I$(CTP_INC) -D$(CTP_VERSION) -I./src/public -I./src/api/net  -fPIC -fvisibility=hidden -fvisibility-inlines-hidden -g -c $< -o $@
+	gcc -I$(CTP_INC) -DCTP_VER=$(CTP_VER) -I./src/public -I./src/api/net  -fPIC -fvisibility=hidden -fvisibility-inlines-hidden -g -c $< -o $@
 
 dist/obj/api/release/net/%.o: src/api/net/%.cpp
-	gcc -I$(CTP_INC) -D$(CTP_VERSION) -I./src/public -I./src/api/net  -fPIC -fvisibility=hidden -fvisibility-inlines-hidden -g -c $< -o $@
+	gcc -I$(CTP_INC) -DCTP_VER=$(CTP_VER) -I./src/public -I./src/api/net  -fPIC -fvisibility=hidden -fvisibility-inlines-hidden -g -c $< -o $@
 
 
 $(TARGET_OBJ_DEBUG):

@@ -15,6 +15,12 @@ static TradeSpi_CallbackInfo spi_callback_list[Spi_CallbackCount] =
 	Declare2Func_1(OnFrontDisconnected,int ),
 	Declare2Func_1(OnHeartBeatWarning,int ),
 	Declare2Func_4(OnRspAuthenticate,CThostFtdcRspAuthenticateField ),
+
+#if CTP_VER >= 6007013
+	Declare2Func_1(OnRtnPrivateSeqNo,int ),
+#else
+	Declare2Func_nil(OnRtnPrivateSeqNo,int),
+#endif
 	Declare2Func_4(OnRspUserLogin,CThostFtdcRspUserLoginField ),
 	Declare2Func_4(OnRspUserLogout,CThostFtdcUserLogoutField ),
 	Declare2Func_4(OnRspUserPasswordUpdate,CThostFtdcUserPasswordUpdateField ),
@@ -47,7 +53,7 @@ static TradeSpi_CallbackInfo spi_callback_list[Spi_CallbackCount] =
 	Declare2Func_4(OnRspQryTradingCode,CThostFtdcTradingCodeField ),
 	Declare2Func_4(OnRspQryInstrumentMarginRate,CThostFtdcInstrumentMarginRateField ),
 	Declare2Func_4(OnRspQryInstrumentCommissionRate,CThostFtdcInstrumentCommissionRateField ),
-#ifdef CTP_6_7	
+#if CTP_VER >= 6007011
 	Declare2Func_4(OnRspQryUserSession,CThostFtdcUserSessionField ),
 #else
 	Declare2Func_nil(OnRspQryUserSession,CThostFtdcUserSessionField ),
@@ -56,12 +62,11 @@ static TradeSpi_CallbackInfo spi_callback_list[Spi_CallbackCount] =
 	Declare2Func_4(OnRspQryProduct,CThostFtdcProductField ),
 	Declare2Func_4(OnRspQryInstrument,CThostFtdcInstrumentField ),
 	Declare2Func_4(OnRspQryDepthMarketData,CThostFtdcDepthMarketDataField ),
-#ifdef CTP_6_7		
+#if CTP_VER >= 6007010		
 	Declare2Func_4(OnRspQryTraderOffer,CThostFtdcTraderOfferField ),
 #else
 	Declare2Func_nil(OnRspQryTraderOffer,CThostFtdcTraderOfferField ),
 #endif
-
 	Declare2Func_4(OnRspQrySettlementInfo,CThostFtdcSettlementInfoField ),
 	Declare2Func_4(OnRspQryTransferBank,CThostFtdcTransferBankField ),
 	Declare2Func_4(OnRspQryInvestorPositionDetail,CThostFtdcInvestorPositionDetailField ),
@@ -170,7 +175,7 @@ static TradeSpi_CallbackInfo spi_callback_list[Spi_CallbackCount] =
 	Declare2Func_4(OnRspQryRiskSettleInvstPosition,CThostFtdcRiskSettleInvstPositionField ),
 	Declare2Func_4(OnRspQryRiskSettleProductStatus,CThostFtdcRiskSettleProductStatusField ),
 
-#ifdef CTP_6_7	
+#if CTP_VER >= 6007010
 	Declare2Func_4(OnRspQrySPBMFutureParameter,CThostFtdcSPBMFutureParameterField ),
 	Declare2Func_4(OnRspQrySPBMOptionParameter,CThostFtdcSPBMOptionParameterField ),
 	Declare2Func_4(OnRspQrySPBMIntraParameter,CThostFtdcSPBMIntraParameterField ),
@@ -242,8 +247,37 @@ static TradeSpi_CallbackInfo spi_callback_list[Spi_CallbackCount] =
 	Declare2Func_nil(OnErrRtnCancelOffsetSetting,CThostFtdcCancelOffsetSettingField ),
     
 	Declare2Func_nil(OnRspQryOffsetSetting,CThostFtdcOffsetSettingField ),
-#endif	
-};
+#endif
 
+#if CTP_VER >= 6007013
+	Declare2Func_4(OnRspGenSMSCode,CThostFtdcRspGenSMSCodeField ),
+	Declare2Func_4(OnRspSpdApply,CThostFtdcInputSpdApplyField ),
+	Declare2Func_4(OnRspSpdApplyAction,CThostFtdcInputSpdApplyActionField  ),
+	Declare2Func_4(OnRspQrySpdApply,CThostFtdcSpdApplyField  ),
+	Declare2Func_4(OnRtnSpdApply,CThostFtdcSpdApplyField  ),
+	Declare2Func_4(OnErrRtnSpdApply,CThostFtdcInputSpdApplyField  ),
+	Declare2Func_4(OnErrRtnSpdApplyAction,CThostFtdcSpdApplyActionField  ),
+	Declare2Func_4(OnRspHedgeCfm,CThostFtdcInputHedgeCfmField  ),
+	Declare2Func_4(OnRspHedgeCfmAction,CThostFtdcInputHedgeCfmActionField  ),
+	Declare2Func_4(OnRspQryHedgeCfm,CThostFtdcHedgeCfmField  ),
+	Declare2Func_4(OnRtnHedgeCfm,CThostFtdcHedgeCfmField  ),
+	Declare2Func_4(OnErrRtnHedgeCfm,CThostFtdcInputHedgeCfmField  ),
+	Declare2Func_4(OnErrRtnHedgeCfmAction,CThostFtdcHedgeCfmActionField  ),
+#else
+	Declare2Func_nil(OnRspGenSMSCode,CThostFtdcRspGenSMSCodeField ),
+	Declare2Func_nil(OnRspSpdApply,CThostFtdcInputSpdApplyField ),
+	Declare2Func_nil(OnRspSpdApplyAction,CThostFtdcInputSpdApplyActionField  ),
+	Declare2Func_nil(OnRspQrySpdApply,CThostFtdcSpdApplyField  ),
+	Declare2Func_nil(OnRtnSpdApply,CThostFtdcSpdApplyField  ),
+	Declare2Func_nil(OnErrRtnSpdApply,CThostFtdcInputSpdApplyField  ),
+	Declare2Func_nil(OnErrRtnSpdApplyAction,CThostFtdcSpdApplyActionField  ),
+	Declare2Func_nil(OnRspHedgeCfm,CThostFtdcInputHedgeCfmField  ),
+	Declare2Func_nil(OnRspHedgeCfmAction,CThostFtdcInputHedgeCfmActionField  ),
+	Declare2Func_nil(OnRspQryHedgeCfm,CThostFtdcHedgeCfmField  ),
+	Declare2Func_nil(OnRtnHedgeCfm,CThostFtdcHedgeCfmField  ),
+	Declare2Func_nil(OnErrRtnHedgeCfm,CThostFtdcInputHedgeCfmField  ),
+	Declare2Func_nil(OnErrRtnHedgeCfmAction,CThostFtdcHedgeCfmActionField  ),
+#endif
+};
 
 TradeSpi_CallbackInfo * g_spi_callback_list = spi_callback_list;

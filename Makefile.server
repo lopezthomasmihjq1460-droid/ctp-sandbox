@@ -1,5 +1,14 @@
-CTP_6.7=./depend/ctp/v6.7.11/include/
-CTP_6.6=./depend/ctp/ThostApi6.6.1P/include/
+CTP_VERSION := 6.7.13
+
+# 把点号替换成空格，变成列表：6 6 1
+CTP_VER_PARTS := $(subst ., ,$(CTP_VERSION))
+VER_MAJOR := $(word 1,$(CTP_VER_PARTS))
+VER_MINOR := $(word 2,$(CTP_VER_PARTS))
+VER_PATCH := $(word 3,$(CTP_VER_PARTS))
+# 计算数值：major*1000000 + minor*1000 + patch
+
+CTP_VER := $(shell echo $$(( $(VER_MAJOR)*1000000 + $(VER_MINOR)*1000 + $(VER_PATCH) )))
+CTP_INC := ./depend/ctp/v$(CTP_VERSION)/include/
 
 PRO_SRC=$(foreach dir,src/broker/trade/,$(wildcard $(dir)/*.cpp))
 PRO_DEPS := $(PRO_SRC:%.cpp=%.d)
@@ -32,13 +41,13 @@ $(PRO_OBJ_debug) : $(P_DEBUG_OBJS)
 	g++ -I$(CTP_6.7) -Wl,-rpath,./ -g -fsanitize=address -o $@ $(P_DEBUG_OBJS) -levent -levent_pthreads -lsqlite3
 
 dist/obj/server/debug/%.o: src/broker/trade/%.cpp
-	gcc -I$(CTP_6.7) -I./src/public -g -fsanitize=address -c $< -o $@
+	gcc -I$(CTP_INC) -DCTP_VER=$(CTP_VER) -I./src/public -g -fsanitize=address -c $< -o $@
 
 $(PRO_OBJ_release) : $(P_RELEASE_OBJS) 
 	g++ -I$(CTP_6.7) -Wl,-rpath,./ -O3 -o $@ $(P_RELEASE_OBJS) -levent -levent_pthreads -lsqlite3
 
 dist/obj/server/release/%.o: src/broker/trade/%.cpp
-	gcc -I$(CTP_6.7) -I./src/public -O3 -c $< -o $@
+	gcc -I$(CTP_INC) -DCTP_VER=$(CTP_VER) -I./src/public -O3 -c $< -o $@
 
 $(TARGET_OBJ_DEBUG):
 	@-mkdir -p $@

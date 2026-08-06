@@ -10,6 +10,7 @@
 #define FiledOffset(type,field) ((const char *)&(((type *)0)->field) - (const char *)0)
 
 #define Declare2Func_all(FuncName,type) {{(TradeApi_Func_v)&CThostFtdcTraderApi::FuncName},2,{sizeof(type),sizeof(int)},#FuncName,0,FiledOffset(type,BrokerID),FiledOffset(type,UserID),FiledOffset(type,InvestorID),-1}
+#define Declare2Func_nil(FuncName,type) {{(TradeApi_Func_v)nullptr},2,{sizeof(type),sizeof(int)},#FuncName,0,-1,-1,-1,-1}
 
 #define Declare2Func_B(FuncName,type) {{(TradeApi_Func_v)&CThostFtdcTraderApi::FuncName},2,{sizeof(type),sizeof(int)},#FuncName,0,FiledOffset(type,BrokerID),-1,-1,-1}
 #define Declare2Func_B_U(FuncName,type) {{(TradeApi_Func_v)&CThostFtdcTraderApi::FuncName},2,{sizeof(type),sizeof(int)},#FuncName,0,FiledOffset(type,BrokerID),FiledOffset(type,UserID),-1,-1}
@@ -31,20 +32,28 @@ TradeApi_FunctionInfo api_function_list[Api_Count] =
 	Declare2Func_0(Init),
 	Declare2Func_0(Join),
 	Declare2Func_0(GetTradingDay),
+#if CTP_VER >= 6007010
 	Declare2Func_1(GetFrontInfo,CThostFtdcFrontInfoField),
+#endif
 	Declare2Func_1(RegisterFront, char *), //需要单独配置调用
 	Declare2Func_1(RegisterNameServer,char *),
 	Declare2Func_1(RegisterFensUserInfo,CThostFtdcFensUserInfoField ),
 	Declare2Func_1(RegisterSpi,CThostFtdcTraderSpi ), //单独调用,信息发给client
 //--------------------------------------------------------------------------------------
+#if CTP_VER >= 6007013	
+	PreCheckFunc_2(SubscribePrivateTopic,THOST_TE_RESUME_TYPE ),
+#else
 	PreCheckFunc_1(SubscribePrivateTopic,THOST_TE_RESUME_TYPE ),
+#endif
 	PreCheckFunc_1(SubscribePublicTopic,THOST_TE_RESUME_TYPE ),
 
 	PreCheckFunc_2(ReqAuthenticate,CThostFtdcReqAuthenticateField ),
 	Declare2Func_B_U(RegisterUserSystemInfo,CThostFtdcUserSystemInfoField ),
 	Declare2Func_B_U(SubmitUserSystemInfo,CThostFtdcUserSystemInfoField ),
+
 	Declare2Func_B_U(RegisterWechatUserSystemInfo,CThostFtdcWechatUserSystemInfoField ),
 	Declare2Func_B_U(SubmitWechatUserSystemInfo,CThostFtdcWechatUserSystemInfoField ),
+
 	PreCheckFunc_2(ReqUserLogin,CThostFtdcReqUserLoginField ),
 	Declare2Func_B_U(ReqUserLogout,CThostFtdcUserLogoutField ),
 	PreCheckFunc_2(ReqUserPasswordUpdate,CThostFtdcUserPasswordUpdateField ),
@@ -82,8 +91,11 @@ TradeApi_FunctionInfo api_function_list[Api_Count] =
 	Declare2Func_B_V(ReqQryTradingCode,CThostFtdcQryTradingCodeField ),
 	Declare2Func_B_V(ReqQryInstrumentMarginRate,CThostFtdcQryInstrumentMarginRateField ),
 	Declare2Func_B_V(ReqQryInstrumentCommissionRate,CThostFtdcQryInstrumentCommissionRateField ),
-
+#if CTP_VER >= 6007011		
 	Declare2Func_B_U(ReqQryUserSession,CThostFtdcQryUserSessionField ),
+#else
+	Declare2Func_nil(ReqQryUserSession,CThostFtdcQryUserSessionField ),
+#endif
 	Declare2Func_2(ReqQryExchange,CThostFtdcQryExchangeField ),
 	Declare2Func_2(ReqQryProduct,CThostFtdcQryProductField ),
 	Declare2Func_2(ReqQryInstrument,CThostFtdcQryInstrumentField ),

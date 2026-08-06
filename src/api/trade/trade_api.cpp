@@ -13,6 +13,7 @@
 #include "connect_mgr.h"
 #include "package.h"
 
+long long g_instrument_cnt = 0;
 
 struct event_base *g_base = 0;
 std::thread net_thread;
@@ -34,9 +35,11 @@ void log_msg(const char *fmt, ...)
 
 void net_worker(struct event_base *base)
 {
+    log_msg("net_worker start\n");
     event_base_dispatch(base);
 }
 
+char g_version_buffer[64] = {"sandbox"};
 
 #ifdef _MSC_VER
 #include <windows.h>
@@ -46,6 +49,11 @@ BOOL APIENTRY DllMain(HMODULE hModule,DWORD  ul_reason_for_call,LPVOID lpReserve
 	{
 	case DLL_PROCESS_ATTACH:
     {
+        int a = CTP_VER / 1000000;
+        int b = (CTP_VER / 1000) % 1000;
+        int c = CTP_VER % 1000;
+        sprintf(g_version_buffer, "v%d.%d.%d-sandbox", a, b, c);
+
         WSADATA wsa;
         WSAStartup(MAKEWORD(2, 2), &wsa);
 
@@ -53,7 +61,7 @@ BOOL APIENTRY DllMain(HMODULE hModule,DWORD  ul_reason_for_call,LPVOID lpReserve
         // VS Windows平台固定调用，初始化临界区锁
         evthread_use_windows_threads();
         g_base = event_base_new();
-
+		log_msg("DllMain start event_base_new\n");
 //        net_thread.detach();
     }
 		break;
@@ -75,10 +83,15 @@ BOOL APIENTRY DllMain(HMODULE hModule,DWORD  ul_reason_for_call,LPVOID lpReserve
 #else
 __attribute__((constructor)) void trade_api_onstart(void)
 {
+    int a = CTP_VER / 1000000;
+    int b = (CTP_VER / 1000) % 1000;
+    int c = CTP_VER % 1000;
+    sprintf(g_version_buffer, "v%d.%d.%d-sandbox", a, b, c);
+
 	evthread_use_pthreads();
 	g_base = event_base_new();
-    net_thread = std::thread(net_worker, g_base);
-    net_thread.detach();    
+    // net_thread = std::thread(net_worker, g_base);
+    // net_thread.detach();    
 }
 
 __attribute__((destructor)) void trade_api_onstop(void)
@@ -120,7 +133,8 @@ void mgr_on_connected(MultiConnCtx * ctx, TradeHelperData *data)
     getpeername(fd, (struct sockaddr*)&peer, &sl);
     char ip[INET_ADDRSTRLEN];
     evutil_inet_ntop(AF_INET, &peer.sin_addr, ip, sizeof(ip));
-
+    data->package_len = 0;
+    data->package.header.total_len = 0;
     printf("active server: %s:%d\n", ip, ntohs(peer.sin_port));
     data->spi->OnFrontConnected();
 
@@ -135,14 +149,21 @@ void mgr_on_disconnect(MultiConnCtx * ctx, TradeHelperData *data)
     char ip[INET_ADDRSTRLEN];
     evutil_inet_ntop(AF_INET, &peer.sin_addr, ip, sizeof(ip));
     printf("disconenct from server: %s:%d\n", ip, ntohs(peer.sin_port));
-    data->spi->OnFrontDisconnected(8192);
+    data->package_len = 0;
+    data->package.header.total_len = 0;
+    data->spi->OnFrontDisconnected(4097);
+
 }
 
 void mgr_on_connect_fail(MultiConnCtx * ctx,TradeHelperData *data)
 {
     printf("all targets connect failed, wait retry...\n");
-    data->spi->OnFrontDisconnected(8192);
+    data->package_len = 0;
+    data->package.header.total_len = 0;
+    data->spi->OnFrontDisconnected(4097);
 }
+
+static CThostFtdcRspInfoField l_rsp_info = {0};
 
 void (*funcArr[])(TradeHelperData * data,TradeSpi_CallbackInfo *callback) = 
 {
@@ -160,6 +181,14 @@ void (*funcArr[])(TradeHelperData * data,TradeSpi_CallbackInfo *callback) =
         (data->spi->*callback->func.func_4)(data->param[0].ptr, data->param[1].ptr, request_id, is_last);
     }
 };
+
+#if WIN32
+    #define do_Sleep(ms) Sleep(ms)
+#else
+    #define do_Sleep(ms) usleep((ms)*1000)
+#endif
+
+CThostFtdcInstrumentField g_instrument_field = {0};
 
 int mgr_data_read_package(struct bufferevent *bev, TradeHelperData * data)
 {
@@ -221,6 +250,7 @@ int mgr_data_read_package(struct bufferevent *bev, TradeHelperData * data)
     readable -= read_len;
     //已经读取完整数据，处理数据 ,data->package.header.total_len 为数据长度
     data->package_len = 0;
+    data->package.data[data->package.header.total_len] = 0;
 
     if( data->package.header.func_id >= Spi_CallbackCount )
     {
@@ -237,13 +267,12 @@ int mgr_data_read_package(struct bufferevent *bev, TradeHelperData * data)
 
     if( callback->p_cnt != data->package.header.p_cnt )
     {
-        log_msg("<== 08.02\n");
-        log_msg("<== %s 不支持\n",callback->name);
+        log_msg("<== %s 不支持 01\n",callback->name);
         return readable; //参数数量不匹配，这里一定出错了
     }
     if( !callback->func.func_0 )
     {
-        log_msg("<== %s 不支持\n",callback->name);
+        log_msg("<== %s 不支持 02\n",callback->name);
         return readable; //函数为0,可能是新旧版本差异导致
     }
 
@@ -276,7 +305,6 @@ int mgr_data_read_package(struct bufferevent *bev, TradeHelperData * data)
         ptr += param_len;
     }
 
-
     if( data->package.header.p_cnt == 4 )
     {
         if( data->param[3].ptr && *((short *)data->param[3].ptr) )
@@ -285,10 +313,11 @@ int mgr_data_read_package(struct bufferevent *bev, TradeHelperData * data)
         }
     }
     else
-        log_msg("<== %s\n",callback->name);
+    {
+        log_msg("<== %s func_id = %d\n",callback->name,data->package.header.func_id);
+    }
     //调用回调函数
     funcArr[callback->p_cnt](data, callback);
-
     return readable;
 }
 
@@ -302,15 +331,9 @@ void mgr_data_read_cb(struct bufferevent *bev, MultiConnCtx * ctx)
     }while(1);
 }
 
-static void self_event_cb(int fd, short what, TradeHelperData *data)
-{
-    //data->spi->OnRspAuthenticateField (&data->RspAuthenticateField, nullptr, data->auth_requestID, true);
-}
-
-
-
 TraderApiHelper::TraderApiHelper()
 {
+	log_msg("TraderApiHelper::TraderApiHelper ...\n");
     m_data = new TradeHelperData;
     m_data->base = g_base;
 
@@ -329,6 +352,7 @@ TraderApiHelper::TraderApiHelper()
         m_data);
 
     multi_conn_set_read_cb(m_data->netCtx, (DataReadCb)mgr_data_read_cb);
+	log_msg("TraderApiHelper::TraderApiHelper finish\n");
 }
 
 TraderApiHelper::~TraderApiHelper()
@@ -342,15 +366,15 @@ TraderApiHelper::~TraderApiHelper()
     delete m_data;
 }
 
-#ifdef CTP_6_7
+#if CTP_VER >= 6007011
 ctp_helper_trade_API CThostFtdcTraderApi *CThostFtdcTraderApi::CreateFtdcTraderApi(const char *pszFlowPath, bool bIsProductionMode )
 {
     return new TraderApiHelper;
 }
 #else
-
 ctp_helper_trade_API CThostFtdcTraderApi *CThostFtdcTraderApi::CreateFtdcTraderApi(const char *pszFlowPath )
 {
+	log_msg("TraderApiHelper::CreateFtdcTraderApi ...\n");
     return new TraderApiHelper;
 }
 
@@ -359,7 +383,7 @@ ctp_helper_trade_API CThostFtdcTraderApi *CThostFtdcTraderApi::CreateFtdcTraderA
 	///@retrun 获取到的版本号
 ctp_helper_trade_API const char *CThostFtdcTraderApi::GetApiVersion()
 {
-    return "6.7.11-sandbox";
+    return g_version_buffer;
 }
 
 	///删除接口对象本身
@@ -374,8 +398,10 @@ void TraderApiHelper::Release()
 	///@remark 初始化运行环境,只有调用后,接口才开始工作
 void TraderApiHelper::Init()
 {
+	log_msg("TraderApiHelper::Init ...\n");
     if( g_base_run == 0 )
     {
+		log_msg("TraderApiHelper::Init start thread\n");
         g_base_run = 1;
         net_thread = std::thread(net_worker, g_base);
         net_thread.detach();
@@ -383,6 +409,7 @@ void TraderApiHelper::Init()
     //初始化网络
     //初始化其他信息
     multi_conn_start(m_data->netCtx);
+	log_msg("TraderApiHelper::Init finish\n");
 }
 	
 	///等待接口线程结束运行
@@ -400,7 +427,7 @@ const char * TraderApiHelper::GetTradingDay()
     return m_data->TradingDayStr;
 }
 
-#ifdef CTP_6_7	
+#if CTP_VER >= 6007010	
 void TraderApiHelper::GetFrontInfo(CThostFtdcFrontInfoField* pFrontInfo)
 {
 }
@@ -412,6 +439,7 @@ void TraderApiHelper::GetFrontInfo(CThostFtdcFrontInfoField* pFrontInfo)
 	///@remark “tcp”代表传输协议，“127.0.0.1”代表服务器地址。”17001”代表服务器端口号。
 void TraderApiHelper::RegisterFront(char *pszFrontAddress) 
 {
+	log_msg("TraderApiHelper::RegisterFront %s\n",pszFrontAddress);
     register_front(m_data->netCtx,pszFrontAddress);
 }
 	
@@ -431,6 +459,8 @@ void TraderApiHelper::RegisterNameServer(char *pszNsAddress)
 void TraderApiHelper::RegisterFensUserInfo(CThostFtdcFensUserInfoField * pFensUserInfo)
 {
     //暂不实现
+	log_msg("TraderApiHelper::RegisterFensUserInfo %s\n",pFensUserInfo);
+//	register_front(m_data->netCtx,pFensUserInfo);
     return ;
 }
 	
@@ -438,6 +468,7 @@ void TraderApiHelper::RegisterFensUserInfo(CThostFtdcFensUserInfoField * pFensUs
 	///@param pSpi 派生自回调接口类的实例
 void TraderApiHelper::RegisterSpi(CThostFtdcTraderSpi *pSpi) 
 {
+	log_msg("TraderApiHelper::RegisterSpi \n");
     m_data->spi = pSpi;
 }
 
@@ -449,6 +480,18 @@ void TraderApiHelper::RegisterSpi(CThostFtdcTraderSpi *pSpi)
 	///        THOST_TERT_QUICK:只传送登录后私有流的内容
 	///@remark 该方法要在Init方法前调用。若不调用则不会收到私有流的数据。
 
+#if CTP_VER >= 6007013
+void TraderApiHelper::SubscribePrivateTopic(THOST_TE_RESUME_TYPE nResumeType,int nSeqNo)
+{
+    TradeApi_Package package;
+    short val = nResumeType;
+    Init_TradeApi_Package(&package,Api_SubscribePrivateTopic);
+    Append_TradeApi_Package_Val(package,val);
+    Append_TradeApi_Package_Val(package,nSeqNo);
+    //发送数据
+    send_data(m_data->netCtx,package.data,package.header.total_len);
+}
+#else
 void TraderApiHelper::SubscribePrivateTopic(THOST_TE_RESUME_TYPE nResumeType)
 {
     TradeApi_Package package;
@@ -459,7 +502,8 @@ void TraderApiHelper::SubscribePrivateTopic(THOST_TE_RESUME_TYPE nResumeType)
     //发送数据
     send_data(m_data->netCtx,package.data,package.header.total_len);
 }
-	
+#endif
+
 	///订阅公共流。
 	///@param nResumeType 公共流重传方式  
 	///        THOST_TERT_RESTART:从本交易日开始重传
@@ -477,11 +521,19 @@ void TraderApiHelper::SubscribePublicTopic(THOST_TE_RESUME_TYPE nResumeType)
     send_data(m_data->netCtx,package.data,package.header.total_len);
 }
 
-
 #define ApiHelper_ReqQry(func,Field) int TraderApiHelper::func(Field *pReqField, int nRequestID) \
 {\
     if( Check_FlowControl(&m_data->flow_control) <= 0 )\
         return -1;\
+    TradeApi_CallFuncRet(func)\
+}\
+
+#define ApiHelper_ReqQryIns(func,Field) int TraderApiHelper::func(Field *pReqField, int nRequestID) \
+{\
+    if( Check_FlowControl(&m_data->flow_control) <= 0 )\
+        return -1;\
+    g_instrument_cnt = 0;\
+    log_msg("qry ins reqid = %d\n",nRequestID);\
     TradeApi_CallFuncRet(func)\
 }\
 
@@ -506,7 +558,7 @@ int TraderApiHelper::SubmitUserSystemInfo(CThostFtdcUserSystemInfoField *pReqFie
     TradeApi_CallFuncSimpleRet(SubmitUserSystemInfo)
 }
 
-#ifdef CTP_6_7	
+#if CTP_VER >= 6007010
 ///注册用户终端信息，用于中继服务器多连接模式.用于微信小程序等应用上报信息.
 int TraderApiHelper::RegisterWechatUserSystemInfo(CThostFtdcWechatUserSystemInfoField *pReqField) 
 {
@@ -709,7 +761,7 @@ ApiHelper_ReqQry(ReqQryInstrumentMarginRate,CThostFtdcQryInstrumentMarginRateFie
 	///请求查询合约手续费率
 ApiHelper_ReqQry(ReqQryInstrumentCommissionRate,CThostFtdcQryInstrumentCommissionRateField)    
 
-#ifdef CTP_6_7	
+#if CTP_VER >= 6007011
 ApiHelper_ReqQry(ReqQryUserSession,CThostFtdcQryUserSessionField)
 #endif
 	///请求查询交易所
@@ -720,12 +772,12 @@ ApiHelper_ReqQry(ReqQryExchange,CThostFtdcQryExchangeField)
 ApiHelper_ReqQry(ReqQryProduct,CThostFtdcQryProductField)
 
 ///请求查询合约
-ApiHelper_ReqQry(ReqQryInstrument,CThostFtdcQryInstrumentField)
+ApiHelper_ReqQryIns(ReqQryInstrument,CThostFtdcQryInstrumentField)
 
 ///请求查询行情
 ApiHelper_ReqQry(ReqQryDepthMarketData,CThostFtdcQryDepthMarketDataField)
 
-#ifdef CTP_6_7
+#if CTP_VER >= 6007010
 ApiHelper_ReqQry(ReqQryTraderOffer,CThostFtdcQryTraderOfferField)
 #endif
 ///请求查询投资者结算结果
@@ -873,7 +925,7 @@ ApiHelper_ReqQry(ReqQryRiskSettleInvstPosition,CThostFtdcQryRiskSettleInvstPosit
 ApiHelper_ReqQry(ReqQryRiskSettleProductStatus,CThostFtdcQryRiskSettleProductStatusField)
 
 
-#ifdef CTP_6_7
+#if CTP_VER >= 6007010
 
 ///SPBM期货合约参数查询
 ApiHelper_ReqQry(ReqQrySPBMFutureParameter,CThostFtdcQrySPBMFutureParameterField)
@@ -964,5 +1016,29 @@ ApiHelper_ReqQry(ReqCancelOffsetSetting,CThostFtdcInputOffsetSettingField)
 
 //投资者对冲设置查询
 ApiHelper_ReqQry(ReqQryOffsetSetting,CThostFtdcQryOffsetSettingField)
+
+#endif
+
+#if CTP_VER >= 6007013
+
+ApiHelper_ReqQry(ReqGenSMSCode,CThostFtdcReqGenSMSCodeField)
+
+///套利确认请求
+ApiHelper_ReqQry(ReqSpdApply,CThostFtdcInputSpdApplyField)
+
+///套利确认撤销请求
+ApiHelper_ReqQry(ReqSpdApplyAction,CThostFtdcInputSpdApplyActionField)
+
+///套利确认查询请求
+ApiHelper_ReqQry(ReqQrySpdApply,CThostFtdcQrySpdApplyField)
+
+///套保确认请求
+ApiHelper_ReqQry(ReqHedgeCfm,CThostFtdcInputHedgeCfmField)
+
+///套保确认撤销请求
+ApiHelper_ReqQry(ReqHedgeCfmAction,CThostFtdcInputHedgeCfmActionField)
+
+///套保确认查询请求
+ApiHelper_ReqQry(ReqQryHedgeCfm,CThostFtdcQryHedgeCfmField)
 
 #endif

@@ -44,7 +44,7 @@ public:
 	/// @param pFrontInfo：输入输出参数，用于存储获取到的前置信息，不能为空
 	/// @remark 连接成功后，可获取正确的前置地址信息
 	/// @remark 登录成功后，可获取正确的前置流控信息
-#ifdef CTP_6_7	
+#if CTP_VER >= 6007010
 	virtual void GetFrontInfo(CThostFtdcFrontInfoField* pFrontInfo);
 #endif	
 	///注册前置机网络地址
@@ -74,8 +74,11 @@ public:
 	///        THOST_TERT_RESUME:从上次收到的续传
 	///        THOST_TERT_QUICK:只传送登录后私有流的内容
 	///@remark 该方法要在Init方法前调用。若不调用则不会收到私有流的数据。
+#if CTP_VER >= 6007013
+	virtual void SubscribePrivateTopic(THOST_TE_RESUME_TYPE nResumeType, int nSeqNo=1) ;
+#else	
 	virtual void SubscribePrivateTopic(THOST_TE_RESUME_TYPE nResumeType) ;
-	
+#endif
 	///订阅公共流。
 	///@param nResumeType 公共流重传方式  
 	///        THOST_TERT_RESTART:从本交易日开始重传
@@ -95,7 +98,7 @@ public:
 	///上报用户终端信息，用于中继服务器操作员登录模式
 	///操作员登录后，可以多次调用该接口上报客户信息
 	virtual int SubmitUserSystemInfo(CThostFtdcUserSystemInfoField *pUserSystemInfo) ;
-#ifdef CTP_6_7		
+#if CTP_VER >= 6007010
 	///注册用户终端信息，用于中继服务器多连接模式.用于微信小程序等应用上报信息.
 	virtual int RegisterWechatUserSystemInfo(CThostFtdcWechatUserSystemInfoField *pUserSystemInfo) ;
 	///上报用户终端信息，用于中继服务器操作员登录模式.用于微信小程序等应用上报信息.
@@ -206,7 +209,7 @@ public:
 	///请求查询合约手续费率
 	virtual int ReqQryInstrumentCommissionRate(CThostFtdcQryInstrumentCommissionRateField *pQryInstrumentCommissionRate, int nRequestID) ;
 
-#ifdef CTP_6_7		
+#if CTP_VER >= 6007011
 	///请求查询用户会话
 	virtual int ReqQryUserSession(CThostFtdcQryUserSessionField *pQryUserSession, int nRequestID) ;
 #endif
@@ -222,7 +225,7 @@ public:
 	///请求查询行情
 	virtual int ReqQryDepthMarketData(CThostFtdcQryDepthMarketDataField *pQryDepthMarketData, int nRequestID) ;
 
-#ifdef CTP_6_7
+#if CTP_VER >= 6007010
 	///请求查询交易员报盘机
 	virtual int ReqQryTraderOffer(CThostFtdcQryTraderOfferField *pQryTraderOffer, int nRequestID) ;
 #endif
@@ -364,7 +367,7 @@ public:
 	///风险结算产品查询
 	virtual int ReqQryRiskSettleProductStatus(CThostFtdcQryRiskSettleProductStatusField *pQryRiskSettleProductStatus, int nRequestID) ;
 
-#ifdef CTP_6_7
+#if CTP_VER >= 6007010
 	///SPBM期货合约参数查询
 	virtual int ReqQrySPBMFutureParameter(CThostFtdcQrySPBMFutureParameterField *pQrySPBMFutureParameter, int nRequestID) ;
 
@@ -454,6 +457,29 @@ public:
 
 	///投资者对冲设置查询
 	virtual int ReqQryOffsetSetting(CThostFtdcQryOffsetSettingField *pQryOffsetSetting, int nRequestID) ;
+#endif
+#if CTP_VER >= 6007013	
+	///申请短信验证码请求
+	virtual int ReqGenSMSCode(CThostFtdcReqGenSMSCodeField *pReqGenSMSCode, int nRequestID);
+
+	///套利确认请求
+	virtual int ReqSpdApply(CThostFtdcInputSpdApplyField *pInputSpdApply, int nRequestID);
+
+	///套利确认撤销请求
+	virtual int ReqSpdApplyAction(CThostFtdcInputSpdApplyActionField *pInputSpdApplyAction, int nRequestID);
+
+	///套利确认查询请求
+	virtual int ReqQrySpdApply(CThostFtdcQrySpdApplyField *pQrySpdApply, int nRequestID);
+
+	///套保确认请求
+	virtual int ReqHedgeCfm(CThostFtdcInputHedgeCfmField *pInputHedgeCfm, int nRequestID);
+
+	///套保确认撤销请求
+	virtual int ReqHedgeCfmAction(CThostFtdcInputHedgeCfmActionField *pInputHedgeCfmAction, int nRequestID);
+
+	///套保确认查询请求
+	virtual int ReqQryHedgeCfm(CThostFtdcQryHedgeCfmField *pQryHedgeCfm, int nRequestID);
+
 #endif
 	
 public:    

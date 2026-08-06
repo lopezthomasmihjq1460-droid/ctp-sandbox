@@ -26,6 +26,7 @@ TradeSession::TradeSession()
     SubscribePrivateTopic_flag = THOST_TERT_NONE;
     SubscribePublicTopic_flag  = THOST_TERT_NONE;
 
+    instrument_cnt = 0;
     if( m_api )
     {
         m_spi = new TradeSessionSpi(this);
@@ -51,15 +52,18 @@ TradeSession::~TradeSession()
         {
             m_api->Init();
         }
+        printf("m_api release ...\n");
 		m_api->Release();
+        printf("m_api release ok\n");
 		m_api = 0;
 	}
 
     m_data.api = 0;
-	delete m_spi;
+	delete (TradeSessionSpi*)m_spi;
 	m_spi = 0;
 
-    sqlite3_finalize(stmt_product_permission);
+    if( stmt_product_permission )
+        sqlite3_finalize(stmt_product_permission);
 
 }
 
@@ -103,8 +107,6 @@ void (*funcArr[2][3])(TradeSession * session,TradeApi_FunctionInfo *info) =
     }
 };
 
-
-static int g_SessionReqSeq = 1;
 
 int TradeSession::ReadPackage(struct evbuffer *in_buf,PackageData * data)
 {
@@ -256,23 +258,52 @@ int TradeSession::ReadPackage(struct evbuffer *in_buf,PackageData * data)
         }
 
         //处理BrokerID,UserID,InvestorID参数映射
+
         if( callback->BrokerID >= 0 )
         {
-            strncpy(data->param[0].ptr + callback->BrokerID,broker.broker_id.c_str(),sizeof(TThostFtdcBrokerIDType) - 1);
+            Req.broker = data->param[0].ptr + callback->BrokerID;
+            if( data->param[0].ptr[callback->BrokerID] != 0 )
+                strncpy(data->param[0].ptr + callback->BrokerID,broker.broker_id.c_str(),sizeof(TThostFtdcBrokerIDType) - 1);
+        }
+        else
+        {
+            Req.broker = "";
         }
         if( callback->UserID >= 0 )
         {
-            strncpy(data->param[0].ptr + callback->UserID,broker.account.c_str(),sizeof(TThostFtdcUserIDType) - 1);
+            Req.user = data->param[0].ptr + callback->UserID;
+            if( data->param[0].ptr[callback->UserID] != 0 )
+                strncpy(data->param[0].ptr + callback->UserID,broker.account.c_str(),sizeof(TThostFtdcUserIDType) - 1);
+        }
+        else
+        {
+            Req.user = "";
         }
         if( callback->InvestorID >= 0 )
         {
-            strncpy(data->param[0].ptr + callback->InvestorID,broker.account.c_str(),sizeof(TThostFtdcInvestorIDType) - 1);
+            Req.investor = data->param[0].ptr + callback->InvestorID;
+            if( data->param[0].ptr[callback->InvestorID] != 0 )
+                strncpy(data->param[0].ptr + callback->InvestorID,broker.account.c_str(),sizeof(TThostFtdcInvestorIDType) - 1);
+        }
+        else
+        {
+            Req.investor = "";
         }
         if( callback->AccountID >= 0 )
         {
-            strncpy(data->param[0].ptr + callback->AccountID,broker.account.c_str(),sizeof(TThostFtdcAccountIDType) -1);
+            Req.account = data->param[0].ptr + callback->AccountID;
+            if( data->param[0].ptr[callback->AccountID] != 0 )
+                strncpy(data->param[0].ptr + callback->AccountID,broker.account.c_str(),sizeof(TThostFtdcAccountIDType) -1);
         }
-        printf("===>Field Len=%3d,need =%3d , %s\n", p0_size,callback->psize[0],callback->name);
+        else
+        {
+            Req.account = "";
+        }
+        printf("===>Field Len=%3d,need =%3d , %s,investor=%s,account=%s,user=%s,broker=%s\n", p0_size,callback->psize[0],callback->name,Req.investor.c_str(),Req.account.c_str(),Req.user.c_str(),Req.broker.c_str());
+        if( data->package.header.func_id == Api_ReqQryInstrument )
+        {
+            instrument_cnt = 0;
+        }
         funcArr[callback->is_precheck][callback->p_cnt](this,callback);
     }while(0);
     return readable;
@@ -320,13 +351,13 @@ int TradeSession::ReqAuthenticate(CThostFtdcReqAuthenticateField *pReqField, int
     CThostFtdcRspInfoField RspInfo;
 
     RspInfo.ErrorID = 0;
-    strncpy(RspInfo.ErrorMsg,"Authenticated successfully",sizeof(RspInfo.ErrorMsg) );
+    strncpy(RspInfo.ErrorMsg,"Authenticated successfully",sizeof(RspInfo.ErrorMsg)-1 );
 
-    strncpy(RspField.BrokerID,pReqField->BrokerID,sizeof(RspField.BrokerID));
-    strncpy(RspField.UserID,pReqField->UserID,sizeof(RspField.UserID));
-    strncpy(RspField.UserProductInfo,pReqField->UserProductInfo,sizeof(RspField.UserProductInfo));
-    strncpy(RspField.AppID,pReqField->AppID,sizeof(RspField.AppID));
-    RspField.AppType = 0;
+    strncpy(RspField.BrokerID,pReqField->BrokerID,sizeof(RspField.BrokerID) -1);
+    strncpy(RspField.UserID,pReqField->UserID,sizeof(RspField.UserID) - 1);
+    strncpy(RspField.UserProductInfo,pReqField->UserProductInfo,sizeof(RspField.UserProductInfo) -1);
+    strncpy(RspField.AppID,pReqField->AppID,sizeof(RspField.AppID) - 1);
+    RspField.AppType = 1;
             
     ((TradeSessionSpi*)m_spi)->doAuthenticate(&RspField, &RspInfo, request_id, true) ;
 
@@ -372,19 +403,18 @@ int TradeSession::ReqUserLogin(CThostFtdcReqUserLoginField *pReqField, int reque
 	}while(0);    
 
     if( broker_id )
-        front_addr = g_ctp_mgr->GetFrontAddr(pReqField->BrokerID,front_addr_buf);
+        front_addr = g_ctp_mgr->GetFrontAddr(broker_id,front_addr_buf);
 
     if( !front_addr || !account || !pwd02 )
     {
-        printf("debug 001\n");
         CThostFtdcRspUserLoginField RspField = {0};
         CThostFtdcRspInfoField RspInfo;
 
         RspInfo.ErrorID = 48;
-        strncpy(RspInfo.ErrorMsg,"broker not find",sizeof(RspInfo.ErrorMsg) );
+        strncpy(RspInfo.ErrorMsg,"broker not find",sizeof(RspInfo.ErrorMsg) -1);
 
-        strncpy(RspField.BrokerID,pReqField->BrokerID,sizeof(RspField.BrokerID));
-        strncpy(RspField.UserID,pReqField->UserID,sizeof(RspField.UserID));
+        strncpy(RspField.BrokerID,pReqField->BrokerID,sizeof(RspField.BrokerID) - 1);
+        strncpy(RspField.UserID,pReqField->UserID,sizeof(RspField.UserID) - 1);
         
         m_spi->OnRspUserLogin(&RspField, &RspInfo, request_id, true) ;
         return 1;
@@ -408,22 +438,22 @@ int TradeSession::ReqUserLogin(CThostFtdcReqUserLoginField *pReqField, int reque
     loginRequestId = request_id;
     loginField = *pReqField;
     
-    strncpy(loginField.BrokerID,broker_id,sizeof(loginField.BrokerID));
-    strncpy(loginField.UserID,account,sizeof(loginField.UserID));
-    strncpy(loginField.Password,pwd02,sizeof(loginField.Password));
+    strncpy(loginField.BrokerID,broker_id,sizeof(loginField.BrokerID) -1);
+    strncpy(loginField.UserID,account,sizeof(loginField.UserID) - 1);
+    strncpy(loginField.Password,pwd02,sizeof(loginField.Password) - 1);
     sqlite3_reset( stmt );
 
     //避免错误
+    memset(loginField.MacAddress,0,sizeof(loginField.MacAddress));
+    memset(loginField.ClientIPAddress,0,sizeof(loginField.ClientIPAddress));
     memset(loginField.LoginRemark,0,sizeof(loginField.LoginRemark));
     loginField.ClientIPPort = 0;
-    memset(loginField.ClientIPAddress,0,sizeof(loginField.ClientIPAddress));
-
+    
     //首先需要通过认证
     do
     {
         if( has_started )
             break;
-        action_on_connected = 0; //连接成功后，默认是登陆
         Start(front_addr);
         return 1;
     }while(0);

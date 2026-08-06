@@ -5,7 +5,7 @@
 #include <event2/listener.h>
 #include <event2/buffer.h>
 
-#define TradeApi_Buffer 1024
+#define TradeApi_Buffer 2048
 typedef struct TradeApi_Header
 {
     unsigned int total_len;
@@ -56,7 +56,7 @@ do \
         package.header.total_len += p_len;\
     }\
     package.header.p_cnt ++;\
-} while (0);
+} while (0)
 
 #define Append_TradeApi_Package_Val(package,val) \
 do\
@@ -162,6 +162,16 @@ do \
     task->bev = m_data->bev;\
     Init_TradeApi_Package(&task->package,Spi_##func_name);\
     Append_TradeApi_Package_Ptr(task->package,pRspField);\
+    send_task_data(0,0,task);\
+} while (0);
+
+#define TradeSpi_RtnVal(func_name,val) \
+do \
+{\
+    TradeApi_PackageTask *task = new TradeApi_PackageTask;\
+    task->bev = m_data->bev;\
+    Init_TradeApi_Package(&task->package,Spi_##func_name);\
+    Append_TradeApi_Package_Val(task->package,val);\
     send_task_data(0,0,task);\
 } while (0);
 

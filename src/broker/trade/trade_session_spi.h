@@ -7,10 +7,6 @@ class TradeSession;
 class TradeSessionSpi : public CThostFtdcTraderSpi
 {
 public:
-    TradeSessionSpi(TradeSession * session);
-    ~TradeSessionSpi();
-
-public:
 	///当客户端与交易后台建立起通信连接时（还未登录前），该方法被调用。
 	virtual void OnFrontConnected();
 	
@@ -30,6 +26,11 @@ public:
 	///客户端认证响应
 	virtual void OnRspAuthenticate(CThostFtdcRspAuthenticateField *pRspAuthenticateField, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) ;
 	
+#if CTP_VER >= 6007013
+	///该方法在处理私有流之前被调用
+	///@param nSeqNo 即将被处理的私有流的序号
+	virtual void OnRtnPrivateSeqNo(int nSeqNo);	
+#endif
 
 	///登录请求响应
 	virtual void OnRspUserLogin(CThostFtdcRspUserLoginField *pRspUserLogin, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) ;
@@ -127,9 +128,10 @@ public:
 	///请求查询合约手续费率响应
 	virtual void OnRspQryInstrumentCommissionRate(CThostFtdcInstrumentCommissionRateField *pInstrumentCommissionRate, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) ;
 
+#if CTP_VER >= 6007011	
 	///请求查询用户会话响应
 	virtual void OnRspQryUserSession(CThostFtdcUserSessionField *pUserSession, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) ;
-
+#endif
 	///请求查询交易所响应
 	virtual void OnRspQryExchange(CThostFtdcExchangeField *pExchange, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) ;
 
@@ -412,6 +414,7 @@ public:
 	///风险结算产品查询响应
 	virtual void OnRspQryRiskSettleProductStatus(CThostFtdcRiskSettleProductStatusField *pRiskSettleProductStatus, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) ;
 
+#if CTP_VER  >= 6007010
 	///SPBM期货合约参数查询响应
 	virtual void OnRspQrySPBMFutureParameter(CThostFtdcSPBMFutureParameterField *pSPBMFutureParameter, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) ;
 
@@ -510,7 +513,53 @@ public:
 
 	///投资者对冲设置查询响应
 	virtual void OnRspQryOffsetSetting(CThostFtdcOffsetSettingField *pOffsetSetting, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) ;
+#endif
 
+#if CTP_VER >= 6007013
+	///申请短信验证码响应
+	virtual void OnRspGenSMSCode(CThostFtdcRspGenSMSCodeField *pRspGenSMSCode, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) ;
+
+	///套利确认回复
+	virtual void OnRspSpdApply(CThostFtdcInputSpdApplyField *pInputSpdApply, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) ;
+
+	///套利确认撤销回复
+	virtual void OnRspSpdApplyAction(CThostFtdcInputSpdApplyActionField *pInputSpdApplyAction, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) ;
+
+	///套利确认查询回复
+	virtual void OnRspQrySpdApply(CThostFtdcSpdApplyField *pSpdApply, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) ;
+
+	///套利确认通知
+	virtual void OnRtnSpdApply(CThostFtdcSpdApplyField *pSpdApply) ;
+
+	///套利申请录入错误回报
+	virtual void OnErrRtnSpdApply(CThostFtdcInputSpdApplyField *pInputSpdApply, CThostFtdcRspInfoField *pRspInfo);
+
+	///套利确认撤销通知
+	virtual void OnErrRtnSpdApplyAction(CThostFtdcSpdApplyActionField *pSpdApplyAction, CThostFtdcRspInfoField *pRspInfo);
+
+	///套保确认回复
+	virtual void OnRspHedgeCfm(CThostFtdcInputHedgeCfmField *pInputHedgeCfm, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast);
+
+	///套保确认撤销回复
+	virtual void OnRspHedgeCfmAction(CThostFtdcInputHedgeCfmActionField *pInputHedgeCfmAction, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast);
+
+	///套保确认查询回复
+	virtual void OnRspQryHedgeCfm(CThostFtdcHedgeCfmField *pHedgeCfm, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast);
+
+	///套保确认通知
+	virtual void OnRtnHedgeCfm(CThostFtdcHedgeCfmField *pHedgeCfm);
+
+	///套保额度录入错误回报
+	virtual void OnErrRtnHedgeCfm(CThostFtdcInputHedgeCfmField *pInputHedgeCfm, CThostFtdcRspInfoField *pRspInfo);
+
+	///套保确认撤销通知
+	virtual void OnErrRtnHedgeCfmAction(CThostFtdcHedgeCfmActionField *pHedgeCfmAction, CThostFtdcRspInfoField *pRspInfo);
+#endif
+
+
+public:
+    TradeSessionSpi(TradeSession * session);
+    ~TradeSessionSpi();
 
 public:
 	void doAuthenticate(CThostFtdcRspAuthenticateField *pRspField, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) ;

@@ -133,6 +133,16 @@ public:
     }broker;
 
     char buffer_ext[2048];
+
+    struct 
+    {
+        std::string broker;
+        std::string user;
+        std::string account;
+        std::string investor;
+    }Req;
+    
+    long long instrument_cnt;
 private:
 
     CThostFtdcTraderSpi * m_spi;

@@ -1,11 +1,38 @@
 #pragma once
 
+#define Safe_strcpy(target, src) \
+do \
+{ \
+	if( !src )\
+	{\
+		target[0] = 0;\
+		break;\
+	}\
+	strncpy(target, src, sizeof(target) - 1); \
+	target[sizeof(target) - 1] = 0; \
+} while (0)
+
+#define Safe2_strcpy(target, src) \
+do \
+{ \
+	if( target[0] == 0 )\
+		break;\
+	if( !src )\
+	{\
+		target[0] = 0;\
+		break;\
+	}\
+	strncpy(target, src, sizeof(target) - 1); \
+	target[sizeof(target) - 1] = 0; \
+} while (0)
+
 typedef enum TradeSpi_FuncID
 {
 	Spi_OnFrontConnected = 0,
 	Spi_OnFrontDisconnected,
 	Spi_OnHeartBeatWarning,
 	Spi_OnRspAuthenticate,
+	Spi_OnRtnPrivateSeqNo,
 	Spi_OnRspUserLogin,
 	Spi_OnRspUserLogout,
 	Spi_OnRspUserPasswordUpdate,
@@ -166,6 +193,21 @@ typedef enum TradeSpi_FuncID
 	Spi_OnErrRtnOffsetSetting,
 	Spi_OnErrRtnCancelOffsetSetting,
 	Spi_OnRspQryOffsetSetting,
+
+	Spi_OnRspGenSMSCode,
+	Spi_OnRspSpdApply,
+	Spi_OnRspSpdApplyAction,
+	Spi_OnRspQrySpdApply,
+	Spi_OnRtnSpdApply,
+	Spi_OnErrRtnSpdApply,
+	Spi_OnErrRtnSpdApplyAction,
+	Spi_OnRspHedgeCfm,
+	Spi_OnRspHedgeCfmAction,
+	Spi_OnRspQryHedgeCfm,
+	Spi_OnRtnHedgeCfm,
+	Spi_OnErrRtnHedgeCfm,
+	Spi_OnErrRtnHedgeCfmAction,
+
 	Spi_CallbackCount
 }TradeSpi_FuncID;
 

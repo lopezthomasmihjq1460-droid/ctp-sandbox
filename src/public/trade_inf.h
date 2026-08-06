@@ -135,6 +135,13 @@ typedef enum TradeApi_Func_ID
 	Api_ReqOffsetSetting,
 	Api_ReqCancelOffsetSetting,
 	Api_ReqQryOffsetSetting,
+	Api_ReqGenSMSCode,
+	Api_ReqSpdApply,
+	Api_ReqSpdApplyAction,
+	Api_ReqQrySpdApply,
+	Api_ReqHedgeCfm,
+	Api_ReqHedgeCfmAction,
+	Api_ReqQryHedgeCfm,
 	Api_Count
 }TradeApi_Func_ID;
 
