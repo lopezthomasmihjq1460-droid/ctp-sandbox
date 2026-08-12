@@ -146,7 +146,7 @@ int mkdir_dir_each(const char * filename,int mode)
 	return 0;
 }
 
-CThostFtdcTraderApi * TradeMgr::CreateApi(const char * tmp_dir)
+CThostFtdcTraderApi * TradeMgr::CreateApi(bool blsProductionMode ,const char * tmp_dir)
 {
     if( !create_func.func )
         return 0;
@@ -156,7 +156,7 @@ CThostFtdcTraderApi * TradeMgr::CreateApi(const char * tmp_dir)
 	if( api_ver == 0 )
 		api = create_func.v1( tmp_dir );
 	else
-		api = create_func.v2( tmp_dir,true);
+		api = create_func.v2( tmp_dir,blsProductionMode);
     return api;
 }
 

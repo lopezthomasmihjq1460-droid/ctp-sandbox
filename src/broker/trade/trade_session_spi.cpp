@@ -10,6 +10,7 @@
 
 extern std::string g_app_id ;
 extern std::string g_auth_code;
+void gbk_printf(const char *fmt, ...);
 
 #define PrintBUIA(func) \
 do \
@@ -67,9 +68,26 @@ do \
     printf("%s Broker=%s UserID=%s\n",#func,pRspField->BrokerID,pRspField->UserID);\
 }while(0)
 
-#define SpiHelper_OnErrRtn(func,Field) void TradeSessionSpi::func(Field *pRspField, CThostFtdcRspInfoField *pRspInfo) {TradeSpi_RtnErr( func )}
+#define ShowErrorMsg(func) \
+do \
+{\
+    if( !pRspInfo )\
+        break;\
+    if( pRspInfo->ErrorID == 0 )\
+        break;\
+    gbk_printf("%s %s\n", #func,pRspInfo->ErrorMsg);\
+    log_msg("%s %s\n", #func,pRspInfo->ErrorMsg);\
+}while(0) 
+
+
+#define SpiHelper_OnErrRtn(func,Field) void TradeSessionSpi::func(Field *pRspField, CThostFtdcRspInfoField *pRspInfo) {\
+    ShowErrorMsg(func);\
+    TradeSpi_RtnErr( func )\
+}\
+
 #define SpiHelper_OnErrRtnAll(func,Field) void TradeSessionSpi::func(Field *pRspField, CThostFtdcRspInfoField *pRspInfo) {\
     PrintBUIA(func);\
+    ShowErrorMsg(func);\
     if( pRspField )\
     {\
         Safe2_strcpy(pRspField->BrokerID,session->broker.raw_broker.c_str());\
@@ -81,6 +99,7 @@ do \
 }
 #define SpiHelper_OnErrRtnBUV(func,Field) void TradeSessionSpi::func(Field *pRspField, CThostFtdcRspInfoField *pRspInfo) {\
     PrintBUI(func);\
+    ShowErrorMsg(func);\
     if( pRspField )\
     {\
         Safe2_strcpy(pRspField->BrokerID,session->broker.raw_broker.c_str());\
@@ -92,6 +111,7 @@ do \
 
 #define SpiHelper_OnErrRtnBUA(func,Field) void TradeSessionSpi::func(Field *pRspField, CThostFtdcRspInfoField *pRspInfo) {\
     PrintBUA(func);\
+    ShowErrorMsg(func);\
     if( pRspField )\
     {\
         Safe2_strcpy(pRspField->BrokerID,session->broker.raw_broker.c_str());\
@@ -103,6 +123,11 @@ do \
 
 #define SpiHelper_Rtn(func,Field) void TradeSessionSpi::func(Field *pRspField) { \
     printf("%s\n",#func);\
+    TradeSpi_Rtn( func )\
+}
+
+#define SpiHelper_Rtn_Log(func,Field) void TradeSessionSpi::func(Field *pRspField) { \
+    log_msg("%s %s %s %s %c\n",#func,pRspField->ExchangeID,pRspField->InstrumentID,pRspField->EnterTime,pRspField->InstrumentStatus);\
     TradeSpi_Rtn( func )\
 }
 
@@ -173,15 +198,7 @@ do \
 #define SpiHelper_Response(func,Field) void TradeSessionSpi::func(Field *pRspField,CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) {\
     if( bIsLast ) \
         printf("%s\n",#func);\
-    TradeSpi_Response( func )\
-}
-
-#define SpiHelper_Response_check_finish(func,Field) void TradeSessionSpi::func(Field *pRspField,CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) {\
-    session->instrument_cnt++;\
-    if( bIsLast )\
-    {\
-        printf("%s finish cnt = %lld,pRspInfo = %p,nRequestID = %d\n",#func, session->instrument_cnt,pRspInfo,nRequestID);\
-    }\
+    ShowErrorMsg(func);\
     TradeSpi_Response( func )\
 }
 
@@ -190,11 +207,29 @@ do \
     {\
         Safe2_strcpy(pRspField->BrokerID,session->broker.raw_broker.c_str());\
     }\
+    ShowErrorMsg(func);\
     TradeSpi_Response( func ) \
 }
 
 #define SpiHelper_Response_BA(func,Field) void TradeSessionSpi::func(Field *pRspField,CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) { \
     PrintBA(func);\
+    ShowErrorMsg(func);\
+    if( pRspField )\
+    {\
+        Safe2_strcpy(pRspField->BrokerID,session->broker.raw_broker.c_str());\
+        Safe2_strcpy(pRspField->AccountID,session->broker.raw_user.c_str());\
+    }\
+    TradeSpi_Response( func ) \
+}
+
+#define SpiHelper_Response_BA_P1(func,Field) void TradeSessionSpi::func(Field *pRspField,CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) { \
+    static bool is_printf = false;\
+    if( !is_printf )\
+    {\
+        is_printf = true;\
+        PrintBA(func);\
+    }\
+    ShowErrorMsg(func);\
     if( pRspField )\
     {\
         Safe2_strcpy(pRspField->BrokerID,session->broker.raw_broker.c_str());\
@@ -206,6 +241,7 @@ do \
 #define SpiHelper_Response_BU(func,Field) void TradeSessionSpi::func(Field *pRspField,CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) { \
     if( bIsLast)\
         PrintBU(func);\
+    ShowErrorMsg(func);\
     if( pRspField )\
     {\
         Safe2_strcpy(pRspField->BrokerID,session->broker.raw_broker.c_str());\
@@ -217,6 +253,7 @@ do \
 #define SpiHelper_Response_BUA(func,Field) void TradeSessionSpi::func(Field *pRspField,CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) { \
     if( bIsLast)\
         PrintBUA(func);\
+    ShowErrorMsg(func);\
     if( pRspField )\
     {\
         Safe2_strcpy(pRspField->BrokerID,session->broker.raw_broker.c_str());\
@@ -229,6 +266,7 @@ do \
 #define SpiHelper_Response_BV(func,Field) void TradeSessionSpi::func(Field *pRspField,CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) { \
     if( bIsLast)\
         PrintBI(func);\
+    ShowErrorMsg(func);\
     if( pRspField ) \
     {\
         Safe2_strcpy(pRspField->BrokerID,session->broker.raw_broker.c_str());\
@@ -240,6 +278,7 @@ do \
 #define SpiHelper_Response_BUV(func,Field) void TradeSessionSpi::func(Field *pRspField,CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) { \
     if( bIsLast)\
         PrintBUI(func);\
+    ShowErrorMsg(func);\
     if( pRspField )\
     {\
         Safe2_strcpy(pRspField->BrokerID,session->broker.raw_broker.c_str());\
@@ -251,6 +290,7 @@ do \
 
 #define SpiHelper_Response_BVA(func,Field) void TradeSessionSpi::func(Field *pRspField,CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) { \
     PrintBIA(func);\
+    ShowErrorMsg(func);\
     if( pRspField )\
     {\
         Safe2_strcpy(pRspField->BrokerID,session->broker.raw_broker.c_str());\
@@ -263,6 +303,7 @@ do \
 #define SpiHelper_Response_All(func,Field) void TradeSessionSpi::func(Field *pRspField,CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) { \
     if( bIsLast)\
         PrintBUIA(func);\
+    ShowErrorMsg(func);\
     if( pRspField )\
     {\
         Safe2_strcpy(pRspField->BrokerID,session->broker.raw_broker.c_str());\
@@ -283,10 +324,22 @@ TradeSessionSpi::~TradeSessionSpi()
 {
 }
 
+
+const char * connect_msg[] = 
+{
+    "发起登陆请求",
+    "发起认证请求",
+};
+
+void log_msg(const char *fmt, ...);
+
 	///当客户端与交易后台建立起通信连接时（还未登录前），该方法被调用。
 void TradeSessionSpi::OnFrontConnected()
 {
-    printf("TradeSessionSpi::OnFrontConnected action_on_connected=%d\n",session->action_on_connected);
+    gbk_printf("交易前置连接成功,%s\n",connect_msg[session->action_on_connected & 0x1]);
+    log_msg("交易前置连接成功,%s\n",connect_msg[session->action_on_connected & 0x1]);
+
+    session->Reset();
 
 	if( session->action_on_connected == 0 )
     {
@@ -314,9 +367,11 @@ void TradeSessionSpi::OnFrontConnected()
 ///        0x2003 收到错误报文
 void TradeSessionSpi::OnFrontDisconnected(int nReason)
 {
-    printf("TradeSessionSpi::OnFrontDisconnected nReason=%d\n",nReason);
+    gbk_printf("交易前置断开连接 reason=%d\n",nReason);
+    log_msg("交易前置断开连接 reason=%d\n",nReason);
 	//关闭客户端连接
     session->CloseClient();
+    session->Reset();
 }
     
 ///心跳超时警告。当长时间未收到报文时，该方法被调用。
@@ -345,8 +400,58 @@ void TradeSessionSpi::OnRtnPrivateSeqNo(int nSeqNo)
     
 #endif
 
+
+unsigned long YYYYMMDD2Int(const char * date)
+{
+	unsigned long ret = 0;
+	int i;
+	for (i = 0; i < 8; i++)
+	{
+		if( !date[i] )
+			return 0;
+		ret *= 10;
+		ret += date[i] - '0';
+	}
+	return ret;
+}
+
+unsigned long HHMISS2time(const char * timestr) //时分秒
+{
+	unsigned long ret = 0; //时分秒
+	ret += ((timestr[0] - '0') * 10 + (timestr[1] - '0')) * 10000;
+
+	ret += ((timestr[3] - '0') * 10 + (timestr[4] - '0')) * 100;
+
+	ret += ((timestr[6] - '0') * 10 + (timestr[7] - '0'));
+
+	return ret;
+}
+
+unsigned int my_get_day();
+
+void TradeSessionSpi::OnRspUserLogin(CThostFtdcRspUserLoginField *pRspField,CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) 
+{
+    PrintBU(OnRspUserLogin);
+    ShowErrorMsg(OnRspUserLogin);
+    if( pRspField )
+    {
+        Safe2_strcpy(pRspField->BrokerID,session->broker.raw_broker.c_str());
+        Safe2_strcpy(pRspField->UserID,session->broker.raw_user.c_str());
+    }
+    do
+    {
+        if( pRspInfo && pRspInfo->ErrorID != 0 )
+            break;
+        
+        session->day.actionDay = my_get_day();
+        session->day.tradingDay = YYYYMMDD2Int(pRspField->TradingDay);
+    }while(0);
+    
+    TradeSpi_Response( OnRspUserLogin ) 
+}
+
 ///登录请求响应
-SpiHelper_Response_BU(OnRspUserLogin,CThostFtdcRspUserLoginField)
+//SpiHelper_Response_BU(OnRspUserLogin,CThostFtdcRspUserLoginField)
 
 ///登出请求响应
 SpiHelper_Response_BU(OnRspUserLogout,CThostFtdcUserLogoutField)
@@ -427,7 +532,7 @@ SpiHelper_Response_BUV(OnRspQryTrade,CThostFtdcTradeField)
 SpiHelper_Response_BV(OnRspQryInvestorPosition,CThostFtdcInvestorPositionField)
 
 ///请求查询资金账户响应
-SpiHelper_Response_BA(OnRspQryTradingAccount,CThostFtdcTradingAccountField)
+SpiHelper_Response_BA_P1(OnRspQryTradingAccount,CThostFtdcTradingAccountField)
 
 ///请求查询投资者响应
 SpiHelper_Response_BV(OnRspQryInvestor,CThostFtdcInvestorField)
@@ -454,7 +559,33 @@ SpiHelper_Response(OnRspQryExchange,CThostFtdcExchangeField)
 SpiHelper_Response(OnRspQryProduct,CThostFtdcProductField)
 
 ///请求查询合约响应
-SpiHelper_Response_check_finish(OnRspQryInstrument,CThostFtdcInstrumentField)
+void TradeSessionSpi::OnRspQryInstrument(CThostFtdcInstrumentField *pRspField,CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) {
+    ShowErrorMsg(OnRspQryInstrument);
+    do
+    {
+        if( !pRspField )
+            break;
+        if ( (g_instrument_tradingday == session->day.tradingDay ) && (g_instrument_day == session->day.actionDay) )
+            break;
+        if( pRspInfo && pRspInfo->ErrorID != 0 )
+            break;
+        
+        g_instrument_map[pRspField->InstrumentID] = {pRspField->InstrumentID,(long long)(pRspField->PriceTick+0.000000001)*10000,pRspField->MaxLimitOrderVolume};
+    }while(0);
+
+    //session->instrument_map[pRspField->InstrumentID] = {pRspField->InstrumentID,(long long)(pRspField->PriceTick+0.000000001)*10000,pRspField->MaxLimitOrderVolume};
+    if( session->Req.is_user_qry_instrument )
+        TradeSpi_Response( OnRspQryInstrument )
+    if( bIsLast )
+    {
+        session->Req.is_user_qry_instrument = 0;
+        printf("%s finish cnt = %lld,pRspInfo = %p,nRequestID = %d\n","OnRspQryInstrument", g_instrument_map.size(),pRspInfo,nRequestID);
+        g_instrument_tradingday = session->day.tradingDay;
+        g_instrument_day = session->day.actionDay;        
+    }
+}
+
+
 
 ///请求查询行情响应
 SpiHelper_Response(OnRspQryDepthMarketData,CThostFtdcDepthMarketDataField)
@@ -571,7 +702,9 @@ void TradeSessionSpi::OnRtnOrder(CThostFtdcOrderField *pRspField)
     session->OnRtnOrder(pRspField); //需要检查订单是否完结，用于自成交数据判断
     if( pRspField )
     {
-        printf("%s Broker=%s User=%s Investor=%s Account=%s\n","OnRtnOrder",pRspField->BrokerID,pRspField->UserID,pRspField->InvestorID,pRspField->AccountID);
+        gbk_printf("%s [%s %.3f %d %d] %s\n","OnRtnOrder",pRspField->InstrumentID,pRspField->LimitPrice,pRspField->VolumeTotalOriginal,pRspField->Direction, pRspField->StatusMsg);
+        log_msg("%s [%s %.3f %d %d] %s\n","OnRtnOrder",pRspField->InstrumentID,pRspField->LimitPrice,pRspField->VolumeTotalOriginal,pRspField->Direction, pRspField->StatusMsg);
+
         Safe2_strcpy(pRspField->BrokerID,session->broker.raw_broker.c_str());
         Safe2_strcpy(pRspField->UserID,session->broker.raw_user.c_str());
         Safe2_strcpy(pRspField->InvestorID,session->broker.raw_user.c_str());
@@ -590,7 +723,7 @@ SpiHelper_OnErrRtnAll(OnErrRtnOrderInsert,CThostFtdcInputOrderField)
 SpiHelper_OnErrRtnBUV(OnErrRtnOrderAction,CThostFtdcOrderActionField)
 
 ///合约交易状态通知
-SpiHelper_Rtn(OnRtnInstrumentStatus,CThostFtdcInstrumentStatusField)
+SpiHelper_Rtn_Log(OnRtnInstrumentStatus,CThostFtdcInstrumentStatusField)
 
 ///交易所公告通知
 SpiHelper_Rtn(OnRtnBulletin,CThostFtdcBulletinField)

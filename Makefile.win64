@@ -18,24 +18,36 @@ PRO_OUT_PATH=./dist/obj/server
 
 OBJS_NODIR := $(notdir $(PRO_OBJS))
 
-P_WIN64_OBJS := $(addprefix $(PRO_OUT_PATH)/win64/,$(OBJS_NODIR)) 
+P_WIN64_OBJS_D := $(addprefix $(PRO_OUT_PATH)/win64/debug/,$(OBJS_NODIR)) 
+P_WIN64_OBJS_R := $(addprefix $(PRO_OUT_PATH)/win64/release/,$(OBJS_NODIR)) 
 
-PRO_OBJ_win64=./dist/server/win64/ctp_sandbox.exe
+PRO_OBJ_win64=./dist/server/win64/ctp_sandbox
 
-TARGET_OBJ_WIN64 := dist/obj/server/win64/
+TARGET_OBJ_WIN64 := dist/obj/server/win64
 TARGET_WIN64 := dist/server/win64/
 
-all: win64 
+all: debug release
 
-win64: $(TARGET_OBJ_WIN64) $(TARGET_WIN64) $(PRO_OBJ_win64)
+debug: $(TARGET_OBJ_WIN64)/debug $(TARGET_WIN64) $(PRO_OBJ_win64).debug.exe
 
-$(PRO_OBJ_win64) : $(P_WIN64_OBJS) 
-	x86_64-w64-mingw32-g++ -I$(CTP_INC) -DCTP_VER=$(CTP_VER) -L./depend/event/lib/win64 -Wl,-rpath,./ -g -o $@ $(P_WIN64_OBJS) -levent-2-1-7 -levent_core-2-1-7 -levent_extra-2-1-7 -lsqlite3 -lws2_32
+$(PRO_OBJ_win64).debug.exe : $(P_WIN64_OBJS_D) 
+	x86_64-w64-mingw32-g++ -I$(CTP_INC) -DCTP_VER=$(CTP_VER) -L./depend/event/lib/win64 -Wl,-rpath,./ -g -o $@ $(P_WIN64_OBJS_D) -levent-2-1-7 -levent_core-2-1-7 -levent_extra-2-1-7 -lsqlite3 -lws2_32
 
-dist/obj/server/win64/%.o: src/broker/trade/%.cpp
+dist/obj/server/win64/debug/%.o: src/broker/trade/%.cpp
 	x86_64-w64-mingw32-gcc -I$(CTP_INC) -DCTP_VER=$(CTP_VER) -I./depend/event/include  -I./src/public -g -c $< -o $@
 
-$(TARGET_OBJ_WIN64):
+release: $(TARGET_OBJ_WIN64)/release $(TARGET_WIN64) $(PRO_OBJ_win64).release.exe
+
+$(PRO_OBJ_win64).release.exe : $(P_WIN64_OBJS_R) 
+	x86_64-w64-mingw32-g++ -I$(CTP_INC) -DCTP_VER=$(CTP_VER) -L./depend/event/lib/win64 -Wl,-rpath,./ -O3 -o $@ $(P_WIN64_OBJS_R) -levent-2-1-7 -levent_core-2-1-7 -levent_extra-2-1-7 -lsqlite3 -lws2_32
+
+dist/obj/server/win64/release/%.o: src/broker/trade/%.cpp
+	x86_64-w64-mingw32-gcc -I$(CTP_INC) -DCTP_VER=$(CTP_VER) -I./depend/event/include  -I./src/public -O3 -c $< -o $@
+
+$(TARGET_OBJ_WIN64)/debug:
+	@-mkdir -p $@
+
+$(TARGET_OBJ_WIN64)/release:
 	@-mkdir -p $@
 
 $(TARGET_WIN64):

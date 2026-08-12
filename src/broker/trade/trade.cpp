@@ -8,6 +8,7 @@
 #ifdef WIN32
 	#include <winsock2.h>
 	#include <ws2tcpip.h>
+    #define JAN1970 116444736000000000LL
 #else
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -50,9 +51,86 @@ static int g_server_running = 1;
 
 std::string g_app_id = "test";
 std::string g_auth_code = "test";
+bool g_bIsProductionMode = true;
 
 ServerConfig g_cfg = {0};
 
+FILE *g_log_fp = 0;
+
+struct my_timeval
+{
+    long long    tv_sec;         /* seconds */
+    long long    tv_usec;        /* and microseconds */
+};
+
+
+int	   my_gettimeofday(struct my_timeval * tv)
+{
+#ifdef WIN32
+    union {
+	FILETIME ft;
+	long long since1601;	/* time since 1 Jan 1601 in 100ns units */
+    } data;
+
+    GetSystemTimeAsFileTime(&data.ft);
+    tv->tv_usec =((data.since1601 / 10LL) % 1000000LL);
+    tv->tv_sec = ((data.since1601 - JAN1970) / 10000000LL);
+    return (0);
+#else
+	struct timeval tv1;
+	int ret;
+	ret = gettimeofday(&tv1,NULL);
+	tv->tv_sec = tv1.tv_sec;
+	tv->tv_usec = tv1.tv_usec;
+	return ret;
+#endif
+}
+
+struct tm * my_localtime(const long long *timep,struct tm * ptm)
+{
+	struct tm * pret = NULL;
+#if defined(WIN32)
+	localtime_s(ptm,(time_t*)timep);
+	pret = ptm;
+#else
+	if( ptm)
+		pret = localtime_r((time_t*)timep,ptm);
+	else
+		pret = localtime((time_t*)timep);
+#endif
+	return pret;
+};
+
+unsigned int my_get_day()
+{
+	struct tm tm_buf = {0};
+	struct tm *pcurt;
+    my_timeval tv_buffer;
+    my_gettimeofday((struct my_timeval*)&tv_buffer);
+	my_timeval *tv = &tv_buffer;
+    pcurt = my_localtime(&tv->tv_sec,&tm_buf);
+    return (pcurt->tm_year + 1900) * 10000 + (pcurt->tm_mon + 1) * 100 + pcurt->tm_mday;
+}
+
+void log_msg(const char *fmt, ...)
+{
+    if( !g_log_fp )
+        return;
+	struct tm tm_buf = {0};
+	struct tm *pcurt;
+    my_timeval tv_buffer;
+    my_gettimeofday((struct my_timeval*)&tv_buffer);
+	my_timeval *tv = &tv_buffer;
+    pcurt = my_localtime(&tv->tv_sec,&tm_buf);
+
+    fprintf(g_log_fp, "[%4d-%02d-%02d %02d:%02d:%02d %03d] ",pcurt->tm_year + 1900,pcurt->tm_mon+1,pcurt->tm_mday,pcurt->tm_hour,pcurt->tm_min,pcurt->tm_sec,(tv->tv_usec / 1000) %1000);
+    va_list args;
+    va_start(args, fmt);
+    vfprintf(g_log_fp, fmt, args);
+    fflush(g_log_fp);
+
+    va_end(args);
+}
 
 // ===================== 通用优雅关闭入口（统一被信号/命令调用） =====================
 static void graceful_shutdown(void)
@@ -81,7 +159,7 @@ static void graceful_shutdown(void)
     event_base_loopexit(g_base, NULL);
 }
 
-
+void gbk_printf(const char *fmt, ...);
 
 // ===================== JSON配置加载 =====================
 static int load_config_from_db(const char *dbfile)
@@ -89,7 +167,7 @@ static int load_config_from_db(const char *dbfile)
     int nRet = sqlite3_open_v2(dbfile, &g_cfg_db,SQLITE_OPEN_READWRITE ,NULL);
     if (nRet != SQLITE_OK)
 	{
-		printf("配置数据库 %s 打开失败,ret = %d\n",dbfile,nRet);
+		gbk_printf("配置数据库 %s 打开失败,ret = %d\n",dbfile,nRet);
 		return 0;
 	}
     nRet = sqlite3_exec(g_cfg_db, "PRAGMA synchronous = OFF;", 0, 0, 0);
@@ -124,6 +202,13 @@ static int load_config_from_db(const char *dbfile)
             g_app_id = vals;
         else if(strcmp(id,"auth_code") == 0)
             g_auth_code = vals;
+        else if(strcmp(id,"ProductionMode") == 0)
+        {
+            if( atoi(vals) == 0 )
+                g_bIsProductionMode = false;
+            else
+                g_bIsProductionMode = true;
+        }
 	}while(1);
 
     sqlite3_finalize(stmt);
@@ -165,7 +250,7 @@ static void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 
     //这里分配一个客户端节点
 
-    TradeSession * session = new TradeSession();
+    TradeSession * session = new TradeSession(g_bIsProductionMode);
     session->net.netCtx = bev;
 
     bufferevent_setcb(bev, client_read_cb, NULL, client_event_cb, session);
@@ -359,6 +444,8 @@ int main(int argc, char **argv)
         }
     }
 
+    g_log_fp = fopen("trade_api.log", "a");
+
     if (load_config_from_db("ctp_sandbox.db") != 0) return 1;
     printf("Load config: %s:%d log:%s daemon:%s\n",g_cfg.listen_ip, g_cfg.listen_port, LOG_FILE, run_daemon ? "yes" : "no");
     //加载ctp的dll
@@ -368,6 +455,8 @@ int main(int argc, char **argv)
         delete g_ctp_mgr;
         g_ctp_mgr = 0;
         printf("trade mgr init failed\n");
+        log_msg("trade mgr init failed\n");
+        fclose(g_log_fp);
         return 1;
     }
 
@@ -390,5 +479,7 @@ int main(int argc, char **argv)
     g_ctp_mgr = 0;
     unlink(CMD_SOCK_PATH);
     printf("Server exited completely\n");
+    log_msg("Server exited completely\n");
+    fclose(g_log_fp);
     return 0;
 }

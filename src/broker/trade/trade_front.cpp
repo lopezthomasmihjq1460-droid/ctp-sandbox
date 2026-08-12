@@ -68,7 +68,9 @@ TradeApi_FunctionInfo api_function_list[Api_Count] =
 	
 	Declare2Func_all(ReqParkedOrderInsert,CThostFtdcParkedOrderField ),
 	Declare2Func_all(ReqParkedOrderAction,CThostFtdcParkedOrderActionField ),
-	Declare2Func_all(ReqOrderAction,CThostFtdcInputOrderActionField ),
+	//Declare2Func_all(ReqOrderAction,CThostFtdcInputOrderActionField ),
+	PreCheckFunc_all(ReqOrderAction,CThostFtdcInputOrderActionField ), //¥¶¿Ì≥∑µ•
+
 	Declare2Func_B(ReqQryMaxOrderVolume,CThostFtdcQryMaxOrderVolumeField ),
 	Declare2Func_B_V(ReqSettlementInfoConfirm,CThostFtdcSettlementInfoConfirmField ),
 	Declare2Func_B_V(ReqRemoveParkedOrder,CThostFtdcRemoveParkedOrderField ),

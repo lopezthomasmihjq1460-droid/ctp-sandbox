@@ -15,7 +15,7 @@ public:
     int Init();
     void UnInit();
 
-    CThostFtdcTraderApi * CreateApi(const char * tmp_dir = "./tmpConn/");
+    CThostFtdcTraderApi * CreateApi(bool blsProductionMode = true,const char * tmp_dir = "./tmpConn/");
 
 	const char *  GetFrontAddr(const char * broker_id, char front_addr_buffer[128]);//通过broker_id获取前置地址
 

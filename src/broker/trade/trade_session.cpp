@@ -12,21 +12,107 @@
 #include "trade_mgr.h"
 #include "trade_inf.h"
 
+void log_msg(const char *fmt, ...);
+
 extern sqlite3 *  g_cfg_db ;
 const char * user_sql = "select broker_id,account,pwd02,flowctrl,flowperiod,product_ctrl from t_account where id = ? and pwd01 = ?";
 
 const char * product_sql = "select product_id from t_user_product where user_id = ? and product_id = ?";
 
-TradeSession::TradeSession()
+
+#ifndef WIN32
+
+#include <iconv.h>
+
+#define GBK_BUF_SIZE  4096
+#define UTF8_BUF_SIZE (GBK_BUF_SIZE * 2)
+
+/**
+ * @brief GBK -> UTF8 转换封装
+ * @param in_gbk 输入GBK缓冲区
+ * @param in_len 输入长度
+ * @param out_utf8 输出UTF8缓冲区
+ * @param out_cap 输出缓冲区容量
+ * @return 成功返回0，失败-1
+ */
+static int gbk_to_utf8_buf(const char *in_gbk, size_t in_len,
+                           char *out_utf8, size_t out_cap)
+{
+    iconv_t cd = iconv_open("UTF-8", "GBK");
+    if (cd == (iconv_t)-1)
+    {
+        return -1;
+    }
+
+    char *in_ptr  = (char *)in_gbk;
+    char *out_ptr = out_utf8;
+    size_t ilen   = in_len;
+    size_t olen   = out_cap;
+
+    size_t ret = iconv(cd, &in_ptr, &ilen, &out_ptr, &olen);
+    iconv_close(cd);
+
+    if (ret == (size_t)-1)
+    {
+        return -1;
+    }
+    *out_ptr = '\0';
+    return 0;
+}
+
+#endif
+
+void gbk_printf(const char *fmt, ...)
+{
+#ifdef WIN32
+    va_list ap;
+    va_start(ap,fmt);
+    vprintf(fmt, ap);
+    va_end(ap);
+#else
+    char gbk_buf[GBK_BUF_SIZE];
+    char utf8_buf[UTF8_BUF_SIZE];
+
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(gbk_buf, sizeof(gbk_buf), fmt, ap);
+    va_end(ap);
+
+    if (n < 0 || (size_t)n >= sizeof(gbk_buf))
+    {
+        // 缓冲区不足，降级：直接原始输出（防止丢数据）
+        fputs("[BUF_OVERFLOW]", stdout);
+        fputs(gbk_buf, stdout);
+        return ;
+    }
+
+    if (gbk_to_utf8_buf(gbk_buf, (size_t)n, utf8_buf, sizeof(utf8_buf)) != 0)
+    {
+        // 转码失败，原样输出GBK
+        fputs("[CONV_FAIL]", stdout);
+        fputs(gbk_buf, stdout);
+        return ;
+    }
+
+    fputs(utf8_buf, stdout);
+    return ;
+
+#endif    
+}
+
+std::unordered_map<std::string, InstrumentInfo> g_instrument_map;
+unsigned int g_instrument_tradingday = 0;
+unsigned int g_instrument_day = 0;
+
+TradeSession::TradeSession(bool blsProductionMode)
 {
 	has_started = 0;
 	action_on_connected = 0; //默认是认证
-	m_api = g_ctp_mgr->CreateApi();
+	m_api = g_ctp_mgr->CreateApi(blsProductionMode);
     m_data.api = m_api;
     SubscribePrivateTopic_flag = THOST_TERT_NONE;
     SubscribePublicTopic_flag  = THOST_TERT_NONE;
 
-    instrument_cnt = 0;
     if( m_api )
     {
         m_spi = new TradeSessionSpi(this);
@@ -37,7 +123,10 @@ TradeSession::TradeSession()
 	if( g_cfg_db )
 	{
 		sqlite3_prepare_v2(g_cfg_db, product_sql, -1, &stmt_product_permission, 0);
-	}    
+	}
+    m_data.package_len = 0;
+    day.tradingDay = 0;
+    day.actionDay = 0;
 }
 
 static CThostFtdcTraderSpi spi_empty;
@@ -82,6 +171,9 @@ int TradeSession::Start(const char * front_addr)
 	    m_api->SubscribePrivateTopic(SubscribePrivateTopic_flag);
     if( SubscribePublicTopic_flag != THOST_TERT_NONE )
 	    m_api->SubscribePublicTopic(SubscribePublicTopic_flag); 
+
+    printf("m_api init ...\n");
+    log_msg("m_api init ...\n");
 	m_api->Init();
 	return 1;
 }
@@ -299,10 +391,11 @@ int TradeSession::ReadPackage(struct evbuffer *in_buf,PackageData * data)
         {
             Req.account = "";
         }
-        printf("===>Field Len=%3d,need =%3d , %s,investor=%s,account=%s,user=%s,broker=%s\n", p0_size,callback->psize[0],callback->name,Req.investor.c_str(),Req.account.c_str(),Req.user.c_str(),Req.broker.c_str());
+        if( Api_ReqQryTradingAccount != data->package.header.func_id )
+            printf("===>Field Len=%3d,need =%3d , %s,investor=%s,account=%s,user=%s,broker=%s\n", p0_size,callback->psize[0],callback->name,Req.investor.c_str(),Req.account.c_str(),Req.user.c_str(),Req.broker.c_str());
         if( data->package.header.func_id == Api_ReqQryInstrument )
         {
-            instrument_cnt = 0;
+            Req.is_user_qry_instrument = 1;
         }
         funcArr[callback->is_precheck][callback->p_cnt](this,callback);
     }while(0);
@@ -441,6 +534,7 @@ int TradeSession::ReqUserLogin(CThostFtdcReqUserLoginField *pReqField, int reque
     strncpy(loginField.BrokerID,broker_id,sizeof(loginField.BrokerID) -1);
     strncpy(loginField.UserID,account,sizeof(loginField.UserID) - 1);
     strncpy(loginField.Password,pwd02,sizeof(loginField.Password) - 1);
+    strncpy(loginField.UserProductInfo,"TradeSandbox",sizeof(loginField.UserProductInfo) -1);
     sqlite3_reset( stmt );
 
     //避免错误
@@ -512,6 +606,9 @@ bool TradeSession::CheckProductPermission(const char * product_id)
 
     int ret = sqlite3_step(stmt_product_permission);
     printf("CheckProductPermission db ret = %d\n",ret);
+    
+    log_msg("CheckProductPermission db ret = %d\n",ret);
+
     sqlite3_reset(stmt_product_permission);
     if( ret != SQLITE_ROW )
     {
@@ -533,10 +630,10 @@ bool TradeSession::CheckProductPermission(const char * product_id)
     return false;
 }
 
-bool TradeSession::CheckSelfDeal(const char * instrument_id,double price,int dir)
+bool TradeSession::CheckSelfDeal(const char * instrument_id,long long price,int dir)
 {
     //此处需要优化，包括价格类型，套保套利，标准套利等情况，还有order巨大情况的性能优化
-    for (SessionTable::iterator iter = order_map.begin(); iter != order_map.end(); ++iter)
+    for (SessionTable::iterator iter = selfdeal_map.begin(); iter != selfdeal_map.end(); ++iter)
     {
         // iter->first  = SessionKey
         // iter->second = value字符串
@@ -599,6 +696,68 @@ int TradeSession::ReqTradingAccountPasswordUpdate(CThostFtdcTradingAccountPasswo
 
 int TradeSession::ReqOrderInsert(CThostFtdcInputOrderField *pInputOrder, int nRequestID)
 {
+    //0、检查合约是否存在，价格是否符合要求
+    long long price = (pInputOrder->LimitPrice + 0.00000001)*10000; //价格转换为整数，方便比较
+
+    do
+    {
+        if( g_instrument_tradingday != day.tradingDay || g_instrument_day != day.actionDay )
+        {
+            //需要重查合约
+            CThostFtdcQryInstrumentField req = {0};
+            m_api->ReqQryInstrument(&req, 0);
+
+            CThostFtdcRspInfoField RspInfo = {0};
+            RspInfo.ErrorID = 404;
+            snprintf(RspInfo.ErrorMsg,sizeof(RspInfo.ErrorMsg) -1,"合约信息查询中,稍后重试...",pInputOrder->InstrumentID);
+            log_msg("%s 报单失败 合约信息查询中,稍后重试...\n",pInputOrder->InstrumentID);
+            gbk_printf("%s 报单失败 合约信息查询中,稍后重试...\n",pInputOrder->InstrumentID);
+            m_spi->OnRspOrderInsert(pInputOrder, &RspInfo, nRequestID, true) ;
+
+            return 0;
+        }
+        auto instrument = g_instrument_map.find(pInputOrder->InstrumentID);
+        if( instrument == g_instrument_map.end() )
+        {
+            //合约不存在，拒绝该订单
+            CThostFtdcRspInfoField RspInfo = {0};
+            RspInfo.ErrorID = 404;
+            snprintf(RspInfo.ErrorMsg,sizeof(RspInfo.ErrorMsg) -1,"合约 %s 不存在",pInputOrder->InstrumentID);
+            log_msg("合约 %s 不存在,拒绝该订单\n",pInputOrder->InstrumentID);
+            gbk_printf("合约 %s 不存在,拒绝该订单\n",pInputOrder->InstrumentID);
+            m_spi->OnRspOrderInsert(pInputOrder, &RspInfo, nRequestID, true) ;
+            return 0;
+        }
+
+        if( pInputOrder->VolumeTotalOriginal > instrument->second.volume_limit )
+        {
+            //合约最大订单量超出，拒绝该订单
+            CThostFtdcRspInfoField RspInfo = {0};
+            RspInfo.ErrorID = 405;
+            snprintf(RspInfo.ErrorMsg,sizeof(RspInfo.ErrorMsg) -1,"合约 %s 最大订单量超出限制",pInputOrder->InstrumentID);
+            log_msg("合约 %s 最大订单量超出限制,拒绝该订单\n",pInputOrder->InstrumentID);
+            gbk_printf("合约 %s 最大订单量超出限制,拒绝该订单\n",pInputOrder->InstrumentID);
+
+            m_spi->OnRspOrderInsert(pInputOrder, &RspInfo, nRequestID, true) ;
+            return 0;
+        }
+
+        if( instrument->second.price_tick == 0 )
+            break;
+    
+        if( (price % instrument->second.price_tick) != 0 )
+        {
+            //价格不符合要求，拒绝该订单
+            CThostFtdcRspInfoField RspInfo = {0};
+            RspInfo.ErrorID = 406;
+            snprintf(RspInfo.ErrorMsg,sizeof(RspInfo.ErrorMsg) -1,"价格 %lld 不符合要求",price);
+            log_msg("%s 价格 %.3f 不符合要求,拒绝该订单\n",pInputOrder->InstrumentID,(pInputOrder->LimitPrice + 0.00000001));
+            gbk_printf("%s 价格 %.3f 不符合要求,拒绝该订单\n",pInputOrder->InstrumentID,(pInputOrder->LimitPrice + 0.00000001));
+            m_spi->OnRspOrderInsert(pInputOrder, &RspInfo, nRequestID, true) ;
+            return 0;
+        }
+    }while(0);
+
     //1、品种检查，是否有对应品种交易权限
     char product_id_buffer[32];
     product_id_by_instrument( (const unsigned char *)pInputOrder->InstrumentID,product_id_buffer);
@@ -609,16 +768,23 @@ int TradeSession::ReqOrderInsert(CThostFtdcInputOrderField *pInputOrder, int nRe
         CThostFtdcRspInfoField RspInfo = {0};
         RspInfo.ErrorID = 401;
         snprintf(RspInfo.ErrorMsg,sizeof(RspInfo.ErrorMsg) -1,"无品种 %s 交易权限",product_id_buffer);
+        
+        log_msg("无品种 %s 交易权限,拒绝该订单\n",product_id_buffer);
+        gbk_printf("无品种 %s 交易权限,拒绝该订单\n",product_id_buffer);
+
         m_spi->OnRspOrderInsert(pInputOrder, &RspInfo, nRequestID, true) ;
         return 0;
     }
     //2、自成交检查
-    if( !CheckSelfDeal(pInputOrder->InstrumentID,pInputOrder->LimitPrice,pInputOrder->Direction) )
+    
+
+    if( !CheckSelfDeal(pInputOrder->InstrumentID,price,pInputOrder->Direction) )
     {
-        //没有对应品种交易权限，拒绝该订单
         CThostFtdcRspInfoField RspInfo = {0};
         RspInfo.ErrorID = 402;
         snprintf(RspInfo.ErrorMsg,sizeof(RspInfo.ErrorMsg) -1,"存在自成交风险(%s/%.3f)",pInputOrder->InstrumentID,pInputOrder->LimitPrice);
+        log_msg("存在自成交风险(%s/%.3f | %d),拒绝该订单\n",pInputOrder->InstrumentID,(pInputOrder->LimitPrice + 0.00000001),pInputOrder->Direction);
+        gbk_printf("存在自成交风险(%s/%.3f | %d),拒绝该订单\n",pInputOrder->InstrumentID,(pInputOrder->LimitPrice + 0.00000001),pInputOrder->Direction);
         m_spi->OnRspOrderInsert(pInputOrder, &RspInfo, nRequestID, true) ;
         return 0;
     }
@@ -632,6 +798,8 @@ int TradeSession::ReqOrderInsert(CThostFtdcInputOrderField *pInputOrder, int nRe
             CThostFtdcRspInfoField RspInfo = {0};
             RspInfo.ErrorID = 403;
             strncpy(RspInfo.ErrorMsg,"报单频率超出限制",sizeof(RspInfo.ErrorMsg) -1);
+            log_msg("报单频率超出限制,拒绝该订单 %s %d %.3f | %d\n",pInputOrder->InstrumentID,pInputOrder->VolumeTotalOriginal,(pInputOrder->LimitPrice + 0.00000001), pInputOrder->Direction);
+            gbk_printf("报单频率超出限制,拒绝该订单 %s %d %.3f | %d\n",pInputOrder->InstrumentID,pInputOrder->VolumeTotalOriginal,(pInputOrder->LimitPrice + 0.00000001), pInputOrder->Direction);
 
             m_spi->OnRspOrderInsert(pInputOrder, &RspInfo, nRequestID, true) ;
             return 0;
@@ -639,22 +807,70 @@ int TradeSession::ReqOrderInsert(CThostFtdcInputOrderField *pInputOrder, int nRe
     }
     pInputOrder->SessionReqSeq = nRequestID;
     
-    m_api->ReqOrderInsert(pInputOrder,nRequestID);
-    return 1;
+    OrderKey key = {pInputOrder->InstrumentID,price,pInputOrder->Direction,pInputOrder->VolumeTotalOriginal,pInputOrder->CombOffsetFlag[0] == THOST_FTDC_OF_Open ? 1 :0};
+    auto order = order_map.find(key);
+    if( order != order_map.end() )
+    {
+        order->second.index++;
+        log_msg("订单 %s(%lld,%d,%d) 重复报单总次数 %d\n",pInputOrder->InstrumentID,price,pInputOrder->Direction,pInputOrder->VolumeTotalOriginal,order->second.index);
+        gbk_printf("订单 %s(%lld,%d,%d) 重复报单总次数 %d\n",pInputOrder->InstrumentID,price,pInputOrder->Direction,pInputOrder->VolumeTotalOriginal,order->second.index);
+    }
+    else
+        order_map[key] = {price,1,pInputOrder->Direction,pInputOrder->VolumeTotalOriginal};
+
+    return m_api->ReqOrderInsert(pInputOrder,nRequestID);
+}
+
+int TradeSession::ReqOrderAction(CThostFtdcInputOrderActionField *pInputOrderAction, int nRequestID)
+{
+    //流控检查
+    if( broker.flowperiod > 0 )
+    {
+        if( Check_FlowControl(&flow_control) <= 0 )
+        {
+            //超出流控阈值，拒绝该订单
+            CThostFtdcRspInfoField RspInfo = {0};
+            RspInfo.ErrorID = 403;
+            strncpy(RspInfo.ErrorMsg,"撤单||频率超出限制",sizeof(RspInfo.ErrorMsg) -1);
+            log_msg("撤单||频率超出限制,拒绝该操作 %s ref=%s SysID=%s\n",pInputOrderAction->InstrumentID,pInputOrderAction->OrderRef,pInputOrderAction->OrderSysID);
+            gbk_printf("撤单||频率超出限制,拒绝该操作 %s ref=%s SysID=%s\n",pInputOrderAction->InstrumentID,pInputOrderAction->OrderRef,pInputOrderAction->OrderSysID);
+            m_spi->OnRspOrderAction(pInputOrderAction, &RspInfo, nRequestID, true) ;
+            return 0;
+        }
+    }
+    // long long price = (pInputOrderAction->LimitPrice + 0.00000001)*10000; //价格转换为整数，方便比较
+    // OrderKey key = {pInputOrderAction->InstrumentID,price,pInputOrderAction->Direction,pInputOrderAction->VolumeTotalOriginal,pInputOrderAction->CombOffsetFlag[0] == THOST_FTDC_OF_Open ? 1 ,0};
+    // order_map[key] = {price,1,pInputOrderAction->Direction,pInputOrderAction->VolumeTotalOriginal};
+    //Req.cancel_cnt++;
+//    log_msg("订单 %s 已撤单,撤单总次数 %d\n",pRspField->OrderSysID,Req.cancel_cnt);    
+    log_msg("请求撤单 %s ref=%s SysID=%s,总撤单数 %lld\n",pInputOrderAction->InstrumentID,pInputOrderAction->OrderRef,pInputOrderAction->OrderSysID,Req.cancel_cnt);
+    gbk_printf("请求撤单 %s ref=%s SysID=%s,总撤单数 %lld\n",pInputOrderAction->InstrumentID,pInputOrderAction->OrderRef,pInputOrderAction->OrderSysID,Req.cancel_cnt);
+    return m_api->ReqOrderAction(pInputOrderAction,nRequestID);
 }
 
 
 
 void TradeSession::OnRtnOrder(CThostFtdcOrderField *pRspField)
 {
-    if( pRspField->OrderStatus ==  THOST_FTDC_OST_Unknown)
-        return;
+    // if( pRspField->OrderStatus ==  THOST_FTDC_OST_Unknown)
+    // {
+    //     printf("TradeSession::OnRtnOrder status = %c\n",pRspField->OrderStatus);
+    //     return;
+    // }
     int is_finish = 0;
     //处理在途的订单
 	switch(pRspField->OrderStatus) //交易已经完结
 	{//如果是
-	case THOST_FTDC_OST_PartTradedNotQueueing:
 	case THOST_FTDC_OST_Canceled:
+    {
+        is_finish = 1;
+        Req.cancel_cnt++;
+        log_msg("请求撤单 %s ref=%s SysID=%s,总撤单数 %lld\n",pRspField->InstrumentID,pRspField->OrderRef,pRspField->OrderSysID,Req.cancel_cnt);
+        gbk_printf("请求撤单 %s ref=%s SysID=%s,总撤单数 %lld\n",pRspField->InstrumentID,pRspField->OrderRef,pRspField->OrderSysID,Req.cancel_cnt);
+
+        //增加撤单统计
+    }
+    case THOST_FTDC_OST_PartTradedNotQueueing:
 	case THOST_FTDC_OST_NoTradeNotQueueing:
 	case THOST_FTDC_OST_AllTraded:
 		is_finish = 1;
@@ -664,19 +880,53 @@ void TradeSession::OnRtnOrder(CThostFtdcOrderField *pRspField)
 	if( THOST_FTDC_OSS_InsertRejected == pRspField->OrderSubmitStatus )
 		is_finish = 1;
 
+    if( pRspField->OrderSysID[0] == 0 )
+        return;
+
     SessionKey key = {pRspField->InstrumentID,pRspField->OrderSysID,pRspField->Direction};
+    auto iter = selfdeal_map.find(key);
     if( is_finish )
     {
         //订单完结，更新订单状态
-        
-        order_map.erase(key);
+        if( THOST_FTDC_OST_Canceled == pRspField->OrderStatus )
+        {
+            if( iter != selfdeal_map.end() )
+            {
+                OrderKey key = {pRspField->InstrumentID,iter->second.price,iter->second.dir,iter->second.vol,2};
+                auto order = order_map.find(key);
+                if( order != order_map.end() )
+                {
+                    order->second.index++;
+                    log_msg("订单 %s(%lld,%d,%d) 重复撤单总次数 %d\n",pRspField->InstrumentID,iter->second.price,iter->second.vol,iter->second.dir,order->second.index);
+                    gbk_printf("订单 %s(%lld,%d,%d) 重复撤单总次数 %d\n",pRspField->InstrumentID,iter->second.price,iter->second.vol,iter->second.dir,order->second.index);
+                }
+                else
+                    order_map[key] = iter->second;
+            }
+        }
+        selfdeal_map.erase(key);
         return;
     }
 
-    auto iter = order_map.find(key);
-    if (iter != order_map.end())
+    if (iter != selfdeal_map.end())
         return;
 
-    order_map[key] = {pRspField->LimitPrice,pRspField->Direction};
+    Req.order_cnt++;
+    log_msg("当日报单总次数 %lld\n",Req.order_cnt);
+    gbk_printf("当日报单总次数 %lld\n",Req.order_cnt);
 
+    long long price = (pRspField->LimitPrice + 0.00000001)*10000; 
+    selfdeal_map[key] = {price,1,pRspField->Direction,pRspField->VolumeTotalOriginal};
+
+}
+
+void TradeSession::Reset()
+{
+    selfdeal_map.clear();
+    order_map.clear();
+    Req.order_cnt = 0;
+    Req.cancel_cnt = 0;
+    day.tradingDay = 0;
+    day.actionDay = 0;
+    Req.is_user_qry_instrument = 0;
 }

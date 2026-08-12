@@ -9,7 +9,7 @@ replace into t_cfg values('listen_ip','127.0.0.1');
 replace into t_cfg values('listen_port','30001');
 replace into t_cfg values('app_id','simnow_client_test');
 replace into t_cfg values('auth_code','0000000000000000');
-
+replace into t_cfg values('ProductionMode','1');
 
 CREATE TABLE IF NOT EXISTS t_account(
     id VARCHAR(128) PRIMARY KEY not null, -- 用户id

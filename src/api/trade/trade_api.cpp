@@ -19,12 +19,14 @@ struct event_base *g_base = 0;
 std::thread net_thread;
 
 
-FILE *g_log_fp = 0;
-
 int g_base_run = 0;
+
+FILE *g_log_fp = 0;
 
 void log_msg(const char *fmt, ...)
 {
+    if( !g_log_fp )
+        return;
     va_list args;
     va_start(args, fmt);
     vfprintf(g_log_fp, fmt, args);
@@ -69,6 +71,7 @@ BOOL APIENTRY DllMain(HMODULE hModule,DWORD  ul_reason_for_call,LPVOID lpReserve
     {
         struct timeval tv = {0, 0};
         event_base_loopexit(g_base, &tv);
+        fclose(g_log_fp);
     }
 		break;
 	case DLL_THREAD_ATTACH:
@@ -88,7 +91,9 @@ __attribute__((constructor)) void trade_api_onstart(void)
     int c = CTP_VER % 1000;
     sprintf(g_version_buffer, "v%d.%d.%d-sandbox", a, b, c);
 
-	evthread_use_pthreads();
+    g_log_fp = fopen("trade_api.log", "a");
+    // VS Linux平台固定调用，初始化临界区锁
+    evthread_use_pthreads();
 	g_base = event_base_new();
     // net_thread = std::thread(net_worker, g_base);
     // net_thread.detach();    
@@ -98,7 +103,7 @@ __attribute__((destructor)) void trade_api_onstop(void)
 {
     struct timeval tv = {0, 0};
     event_base_loopexit(g_base, &tv);
-
+    fclose(g_log_fp);
 }
 
 #endif

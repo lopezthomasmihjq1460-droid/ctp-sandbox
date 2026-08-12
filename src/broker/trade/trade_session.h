@@ -47,6 +47,29 @@ struct SessionKey
     }
 };
 
+struct OrderKey
+{
+    std::string ins;
+    long long price;
+    int dir;
+    int vol;
+    int op; //开仓，平仓，撤单
+
+    // 相等判断：全部成员一致才算同一个key
+    bool operator==(const OrderKey& other) const
+    {
+        if( dir != other.dir )
+            return false;
+        if( vol != other.vol )
+            return false;
+        if( price != other.price )
+            return false;
+        if( ins != other.ins )
+            return false;
+        return true;
+    }
+};
+
 // 给自定义Key提供哈希函数
 namespace std
 {
@@ -67,20 +90,50 @@ namespace std
             return res;
         }
     };
+
+    template<>
+    struct hash<OrderKey>
+    {
+        size_t operator()(const OrderKey& key) const noexcept
+        {
+            // 分步算出各个成员的哈希值
+            size_t h_dir = hash<int>{}(key.dir);
+            size_t h_vol = hash<int>{}(key.vol);
+            size_t h_price = hash<long long>{}(key.price);          
+            size_t h_ins = hash<std::string>{}(key.ins);
+
+            // 哈希混合算法（稳妥不易碰撞写法）
+            size_t res = h_dir;
+            res ^= h_vol + 0x9e3779b9 + (res << 6) + (res >> 2);
+            res ^= h_price + 0x9e3779b9 + (res << 6) + (res >> 2);
+            res ^= h_ins + 0x9e3779b9 + (res << 6) + (res >> 2);
+            return res;
+        }
+    };    
 }
 
 struct OrderInfo
 {
-    double price;
+    long long price;
+    long long index; //相同次数
     int dir;
+    int vol;
+};
+
+struct InstrumentInfo
+{
+    std::string ins;
+    long long price_tick;
+    int volume_limit;
 };
 
 using SessionTable = std::unordered_map<SessionKey, OrderInfo>;
+using OrderTable = std::unordered_map<OrderKey, OrderInfo>;
 
 class TradeSession
 {
 public:
-    TradeSession();
+    TradeSession(bool blsProductionMode = true);
     ~TradeSession();
 
 	int Start(const char * front_addr);
@@ -88,6 +141,7 @@ public:
 	void OnClientData();
     void CloseClient();
 
+    void Reset();
 public:
 	void SubscribePrivateTopic(THOST_TE_RESUME_TYPE nResumeType) ;
 	void SubscribePublicTopic(THOST_TE_RESUME_TYPE nResumeType) ;
@@ -96,6 +150,7 @@ public:
     int ReqOrderInsert(CThostFtdcInputOrderField *pInputOrder, int nRequestID);
 	int ReqUserPasswordUpdate(CThostFtdcUserPasswordUpdateField *pUserPasswordUpdate, int nRequestID) ;
 	int ReqTradingAccountPasswordUpdate(CThostFtdcTradingAccountPasswordUpdateField *pTradingAccountPasswordUpdate, int nRequestID) ;
+    int ReqOrderAction(CThostFtdcInputOrderActionField *pInputOrderAction, int nRequestID);
 public:
 
     TradeSessionNetData net;
@@ -130,6 +185,7 @@ public:
         int flowctrl;
         int flowperiod;
         int product_ctrl;
+
     }broker;
 
     char buffer_ext[2048];
@@ -140,20 +196,33 @@ public:
         std::string user;
         std::string account;
         std::string investor;
+
+        long long order_cnt;   //报单数统计
+        long long cancel_cnt;  //撤单数统计
+
+        int is_user_qry_instrument;
     }Req;
-    
-    long long instrument_cnt;
+
+    struct
+    {
+        unsigned int tradingDay;
+        unsigned int actionDay;
+    }day;
 private:
 
     CThostFtdcTraderSpi * m_spi;
 
     int ReadPackage(struct evbuffer *in_buf,PackageData * data);
     bool CheckProductPermission(const char * product_id);
-    bool CheckSelfDeal(const char * instrument_id,double price,int dir);
+    bool CheckSelfDeal(const char * instrument_id,long long price,int dir);
     
-	SessionTable order_map;
+	SessionTable selfdeal_map;
+    OrderTable   order_map;
 
     sqlite3_stmt *stmt_product_permission;
 
 };
 
+extern std::unordered_map<std::string, InstrumentInfo> g_instrument_map;
+extern unsigned int g_instrument_tradingday ;
+extern unsigned int g_instrument_day ;
