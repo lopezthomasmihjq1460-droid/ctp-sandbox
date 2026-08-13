@@ -392,7 +392,10 @@ int TradeSession::ReadPackage(struct evbuffer *in_buf,PackageData * data)
             Req.account = "";
         }
         if( Api_ReqQryTradingAccount != data->package.header.func_id )
+        {
             printf("===>Field Len=%3d,need =%3d , %s,investor=%s,account=%s,user=%s,broker=%s\n", p0_size,callback->psize[0],callback->name,Req.investor.c_str(),Req.account.c_str(),Req.user.c_str(),Req.broker.c_str());
+            log_msg("===>Field Len=%3d,need =%3d , %s,investor=%s,account=%s,user=%s,broker=%s\n", p0_size,callback->psize[0],callback->name,Req.investor.c_str(),Req.account.c_str(),Req.user.c_str(),Req.broker.c_str());
+        }
         if( data->package.header.func_id == Api_ReqQryInstrument )
         {
             Req.is_user_qry_instrument = 1;
@@ -645,8 +648,16 @@ bool TradeSession::CheckSelfDeal(const char * instrument_id,long long price,int 
             continue; //合约不同，不用管
 
         const OrderInfo& data = iter->second;
-        if( dir > 0 && price >= data.price )
-            return false; //价格交叉，自成交
+        if( dir == THOST_FTDC_D_Buy )
+        {
+            if( price >= data.price )
+                return false; //价格交叉，自成交
+        }
+        else 
+        {
+            if( price <= data.price )
+                return false; //价格交叉，自成交
+        }
     }    
     return true;
 }
@@ -892,8 +903,8 @@ void TradeSession::OnRtnOrder(CThostFtdcOrderField *pRspField)
         {
             if( iter != selfdeal_map.end() )
             {
-                OrderKey key = {pRspField->InstrumentID,iter->second.price,iter->second.dir,iter->second.vol,2};
-                auto order = order_map.find(key);
+                OrderKey okey = {pRspField->InstrumentID,iter->second.price,iter->second.dir,iter->second.vol,2};
+                auto order = order_map.find(okey);
                 if( order != order_map.end() )
                 {
                     order->second.index++;
@@ -901,7 +912,7 @@ void TradeSession::OnRtnOrder(CThostFtdcOrderField *pRspField)
                     gbk_printf("订单 %s(%lld,%d,%d) 重复撤单总次数 %d\n",pRspField->InstrumentID,iter->second.price,iter->second.vol,iter->second.dir,order->second.index);
                 }
                 else
-                    order_map[key] = iter->second;
+                    order_map[okey] = iter->second;
             }
         }
         selfdeal_map.erase(key);

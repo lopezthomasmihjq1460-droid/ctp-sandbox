@@ -457,6 +457,7 @@ int main(int argc, char **argv)
         printf("trade mgr init failed\n");
         log_msg("trade mgr init failed\n");
         fclose(g_log_fp);
+        sqlite3_close_v2(g_cfg_db);
         return 1;
     }
 
@@ -481,5 +482,6 @@ int main(int argc, char **argv)
     printf("Server exited completely\n");
     log_msg("Server exited completely\n");
     fclose(g_log_fp);
+    sqlite3_close_v2(g_cfg_db);
     return 0;
 }

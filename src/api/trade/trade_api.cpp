@@ -529,14 +529,14 @@ void TraderApiHelper::SubscribePublicTopic(THOST_TE_RESUME_TYPE nResumeType)
 #define ApiHelper_ReqQry(func,Field) int TraderApiHelper::func(Field *pReqField, int nRequestID) \
 {\
     if( Check_FlowControl(&m_data->flow_control) <= 0 )\
-        return -1;\
+        return -2;\
     TradeApi_CallFuncRet(func)\
 }\
 
 #define ApiHelper_ReqQryIns(func,Field) int TraderApiHelper::func(Field *pReqField, int nRequestID) \
 {\
     if( Check_FlowControl(&m_data->flow_control) <= 0 )\
-        return -1;\
+        return -2;\
     g_instrument_cnt = 0;\
     log_msg("qry ins reqid = %d\n",nRequestID);\
     TradeApi_CallFuncRet(func)\
