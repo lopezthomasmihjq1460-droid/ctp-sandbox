@@ -578,8 +578,9 @@ void TradeSessionSpi::OnRspQryInstrument(CThostFtdcInstrumentField *pRspField,CT
         TradeSpi_Response( OnRspQryInstrument )
     if( bIsLast )
     {
+        
+        printf("%s finish cnt = %lld,pRspInfo = %p,nRequestID = %d,is user qry = %d\n","OnRspQryInstrument", g_instrument_map.size(),pRspInfo,nRequestID,session->Req.is_user_qry_instrument);
         session->Req.is_user_qry_instrument = 0;
-        printf("%s finish cnt = %lld,pRspInfo = %p,nRequestID = %d\n","OnRspQryInstrument", g_instrument_map.size(),pRspInfo,nRequestID);
         g_instrument_tradingday = session->day.tradingDay;
         g_instrument_day = session->day.actionDay;        
     }
@@ -702,7 +703,7 @@ void TradeSessionSpi::OnRtnOrder(CThostFtdcOrderField *pRspField)
     session->OnRtnOrder(pRspField); //需要检查订单是否完结，用于自成交数据判断
     if( pRspField )
     {
-        gbk_printf("%s [%s %.3f %d %d] %s\n","OnRtnOrder",pRspField->InstrumentID,pRspField->LimitPrice,pRspField->VolumeTotalOriginal,pRspField->Direction, pRspField->StatusMsg);
+//        gbk_printf("%s [%s %.3f %d %d] %s\n","OnRtnOrder",pRspField->InstrumentID,pRspField->LimitPrice,pRspField->VolumeTotalOriginal,pRspField->Direction, pRspField->StatusMsg);
         log_msg("%s [%s %.3f %d %d] %s\n","OnRtnOrder",pRspField->InstrumentID,pRspField->LimitPrice,pRspField->VolumeTotalOriginal,pRspField->Direction, pRspField->StatusMsg);
 
         Safe2_strcpy(pRspField->BrokerID,session->broker.raw_broker.c_str());

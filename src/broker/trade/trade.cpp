@@ -48,6 +48,11 @@ static struct evconnlistener *g_listener = NULL;
 static struct evconnlistener *g_cmd_listener = NULL;
 static int g_server_running = 1;
 
+bool g_bIsClose = false;    
+bool g_bIsPause = false;    
+
+long long g_alert_order = 0;
+long long g_alert_cancel = 0;
 
 std::string g_app_id = "test";
 std::string g_auth_code = "test";
@@ -130,6 +135,96 @@ void log_msg(const char *fmt, ...)
     fflush(g_log_fp);
 
     va_end(args);
+}
+
+#define GBK_BUF_SIZE  4096
+#define UTF8_BUF_SIZE (GBK_BUF_SIZE * 2)
+
+#ifndef WIN32
+
+#include <iconv.h>
+
+
+/**
+ * @brief GBK -> UTF8 转换封装
+ * @param in_gbk 输入GBK缓冲区
+ * @param in_len 输入长度
+ * @param out_utf8 输出UTF8缓冲区
+ * @param out_cap 输出缓冲区容量
+ * @return 成功返回0，失败-1
+ */
+static int gbk_to_utf8_buf(const char *in_gbk, size_t in_len,
+                           char *out_utf8, size_t out_cap)
+{
+    iconv_t cd = iconv_open("UTF-8", "GBK");
+    if (cd == (iconv_t)-1)
+    {
+        return -1;
+    }
+
+    char *in_ptr  = (char *)in_gbk;
+    char *out_ptr = out_utf8;
+    size_t ilen   = in_len;
+    size_t olen   = out_cap;
+
+    size_t ret = iconv(cd, &in_ptr, &ilen, &out_ptr, &olen);
+    iconv_close(cd);
+
+    if (ret == (size_t)-1)
+    {
+        return -1;
+    }
+    *out_ptr = '\0';
+    return 0;
+}
+
+#endif
+
+void gbk_printf(const char *fmt, ...)
+{
+	struct tm tm_buf = {0};
+	struct tm *pcurt;
+    my_timeval tv_buffer;
+    my_gettimeofday((struct my_timeval*)&tv_buffer);
+	my_timeval *tv = &tv_buffer;
+    pcurt = my_localtime(&tv->tv_sec,&tm_buf);
+
+    printf("[%4d-%02d-%02d %02d:%02d:%02d %03d] ",pcurt->tm_year + 1900,pcurt->tm_mon+1,pcurt->tm_mday,pcurt->tm_hour,pcurt->tm_min,pcurt->tm_sec,(tv->tv_usec / 1000) %1000);
+
+#ifdef WIN32
+    va_list ap;
+    va_start(ap,fmt);
+    vprintf(fmt, ap);
+    va_end(ap);
+#else
+    char gbk_buf[GBK_BUF_SIZE];
+    char utf8_buf[UTF8_BUF_SIZE];
+
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(gbk_buf, sizeof(gbk_buf), fmt, ap);
+    va_end(ap);
+
+    if (n < 0 || (size_t)n >= sizeof(gbk_buf))
+    {
+        // 缓冲区不足，降级：直接原始输出（防止丢数据）
+        fputs("[BUF_OVERFLOW]", stdout);
+        fputs(gbk_buf, stdout);
+        return ;
+    }
+
+    if (gbk_to_utf8_buf(gbk_buf, (size_t)n, utf8_buf, sizeof(utf8_buf)) != 0)
+    {
+        // 转码失败，原样输出GBK
+        fputs("[CONV_FAIL]", stdout);
+        fputs(gbk_buf, stdout);
+        return ;
+    }
+
+    fputs(utf8_buf, stdout);
+    return ;
+
+#endif    
 }
 
 // ===================== 通用优雅关闭入口（统一被信号/命令调用） =====================
@@ -268,19 +363,129 @@ static void listener_err_cb(struct evconnlistener *lst,  void *arg)
 }
 
 // ===================== 本地命令Socket处理回调 =====================
+
+
+
+//evutil_socket_t fd, short what, void *arg
+
+int handle_cmd(const char * cmd)
+{
+   if (strstr(cmd, SHUTDOWN_CMD) != NULL) {
+        // 给命令行返回提示
+        return 1;
+    }
+
+    if (strstr(cmd, "disable") != NULL) {
+        // 强制账号退出
+        g_bIsClose = true;
+        printf("禁用账号\n");
+        log_msg("禁用账号\n");
+        return 0;
+    }
+    if (strstr(cmd, "enable") != NULL) {
+        // 强制账号退出
+        g_bIsClose = false;
+        printf("启用账号\n");
+        log_msg("启用账号\n");
+        return 0;
+    }
+
+    if (strstr(cmd, "pause") != NULL) {
+        // 暂停策略交易
+        g_bIsPause = true;
+        gbk_printf("暂停策略交易\n");
+        log_msg("暂停策略交易\n");
+        return 0;
+    }
+    if (strstr(cmd, "resume") != NULL) {
+        // 恢复策略交易
+        g_bIsPause = false;
+        gbk_printf("恢复策略交易\n");
+        log_msg("恢复策略交易\n");
+        return 0;
+    }
+
+    const char * alert_ptr = strstr(cmd, "alert");
+    if( alert_ptr != NULL )
+    {
+        const char * alert_type = strstr(alert_ptr,"order ");
+
+        if( alert_type != NULL )
+        {
+            // 插入订单警报
+            g_alert_order = atol(alert_type + 6);
+            gbk_printf("设置 报单 数量告警阈值 %lld\n",g_alert_order);
+            log_msg("设置 报单 数量告警阈值 %lld\n",g_alert_order);
+            return 0;
+        }
+        alert_type = strstr(alert_ptr,"cancel ");
+        if( alert_type != NULL )
+        {
+            // 取消订单警报
+            g_alert_cancel = atol(alert_type + 7);
+            gbk_printf("设置 撤单 数量告警阈值 %lld\n",g_alert_cancel);
+            log_msg("设置 撤单 数量告警阈值 %lld\n",g_alert_cancel);
+            return 0;
+        }
+    }
+    return 0;
+}
+
 static void cmd_read_cb(struct bufferevent *bev, void *arg)
 {
-    char buf[256] = {0};
+    char buf[512] = {0};
     size_t n = bufferevent_read(bev, buf, sizeof(buf)-1);
     if (n <= 0) return;
 
-    // 匹配shutdown指令
-    if (strstr(buf, SHUTDOWN_CMD) != NULL) {
-        // 给命令行返回提示
+    printf("cmd_read_cb !!! ret = %d\n",n);
+    if( handle_cmd(buf) )
+    {
         struct evbuffer *out = bufferevent_get_output(bev);
         evbuffer_add_printf(out, "Receive shutdown command, server exiting...\n");
         bufferevent_flush(bev, EV_WRITE, BEV_FLUSH);
         graceful_shutdown();
+        return;
+    }
+}
+
+void stdin_readcb(struct bufferevent *bev, void *arg) {
+    struct evbuffer *input = bufferevent_get_input(bev);
+    // 从输入缓冲区读取一行
+    char *line = evbuffer_readln(input, NULL, EVBUFFER_EOL_LF);
+    if (line) {
+        // 将读取到的行发送给另一个bufferevent (比如网络连接)
+        // 这里假设arg指向网络连接的bufferevent
+        struct bufferevent *network_bev = (struct bufferevent*)arg;
+        bufferevent_write(network_bev, line, strlen(line));
+        bufferevent_write(network_bev, "\n", 1);
+        free(line);
+    }
+}
+
+void read_cb(struct bufferevent *bev, void *ctx) {
+    char buffer[1024];
+    int n;
+    // 从输入缓冲区循环读取所有数据
+    while ((n = bufferevent_read(bev, buffer, sizeof(buffer) - 1)) > 0) {
+        buffer[n] = '\0';
+        printf("收到消息: %s", buffer);
+    }
+}
+
+// 事件回调：处理连接、错误、超时等
+void event_cb(struct bufferevent *bev, short events, void *ctx) {
+    if (events & BEV_EVENT_CONNECTED) {
+        printf("已连接到服务器！\n");
+        // 连接成功后发送一条消息
+        bufferevent_write(bev, "Hello, Server!", 14);
+    } else if (events & BEV_EVENT_ERROR) {
+        printf("发生错误: %s\n", strerror(errno));
+    } else if (events & (BEV_EVENT_EOF | BEV_EVENT_TIMEOUT)) {
+        printf("连接已关闭或超时\n");
+    }
+    // 发生错误或连接关闭时，释放bufferevent
+    if (events & (BEV_EVENT_ERROR | BEV_EVENT_EOF | BEV_EVENT_TIMEOUT)) {
+        bufferevent_free(bev);
     }
 }
 
@@ -362,8 +567,98 @@ static int daemonize(void)
     return 0;
 }
 
+static void libevent_log(int severity, const char* msg)
+{
+    (void)severity;
+    printf("[LIBEV] %s\n", msg);
+}
+
+#ifdef WIN32
+int create_socket_pair(SOCKET socks[2]) {
+    SOCKET listener = socket(AF_INET, SOCK_STREAM, 0);
+    if (listener == INVALID_SOCKET) return -1;
+    
+    struct sockaddr_in addr = {0};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = 0;
+    
+    if (bind(listener, (struct sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR) {
+        closesocket(listener);
+        return -1;
+    }
+    
+    int len = sizeof(addr);
+    if (getsockname(listener, (struct sockaddr*)&addr, &len) == SOCKET_ERROR) {
+        closesocket(listener);
+        return -1;
+    }
+    
+    if (listen(listener, 1) == SOCKET_ERROR) {
+        closesocket(listener);
+        return -1;
+    }
+    
+    socks[1] = socket(AF_INET, SOCK_STREAM, 0);
+    if (socks[1] == INVALID_SOCKET) {
+        closesocket(listener);
+        return -1;
+    }
+    
+    if (connect(socks[1], (struct sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR) {
+        closesocket(listener);
+        closesocket(socks[1]);
+        return -1;
+    }
+    
+    socks[0] = accept(listener, NULL, NULL);
+    closesocket(listener);
+    
+    if (socks[0] == INVALID_SOCKET) {
+        closesocket(socks[1]);
+        return -1;
+    }
+    
+    return 0;
+}
+
+// 读取控制台的线程函数
+DWORD WINAPI console_reader_thread(LPVOID param) {
+    SOCKET write_sock = (SOCKET)param;
+    char buffer[1024];
+    
+    while (1) {
+        // 从控制台读取输入
+        if (fgets(buffer, sizeof(buffer), stdin) != NULL) {
+            // 发送到 socket
+            send(write_sock, buffer, strlen(buffer), 0);
+        }
+    }
+    return 0;
+}
+
+// 回调函数
+void stdin_read_cb(struct bufferevent *bev, void *ctx) {
+    struct evbuffer *input = bufferevent_get_input(bev);
+    char *line = evbuffer_readln(input, NULL, EVBUFFER_EOL_LF);
+
+    int ret = 0;
+    if (line) {
+        ret = handle_cmd(line);
+    }
+    free(line);
+
+    if( ret )
+    {
+        graceful_shutdown();
+    }
+}
+
+#endif
+
 void net_worker(void * arg)
 {
+    event_set_log_callback(libevent_log);
 #ifdef WIN32 
     WSADATA wsa;
     WSAStartup(MAKEWORD(2, 2), &wsa);
@@ -380,6 +675,31 @@ void net_worker(void * arg)
         printf("event_base_new failed\n");
         return ;
     }
+
+    do
+    {
+#ifdef WIN32        
+        SOCKET socks[2];
+        if (create_socket_pair(socks) != 0) {
+            printf("无法创建 socket pair\n");
+            break;
+        }
+        
+        // 创建线程读取控制台
+        CreateThread(NULL, 0, console_reader_thread, (LPVOID)socks[1], 0, NULL);
+        
+        // 使用 socket 创建 bufferevent
+        struct bufferevent *stdin_bev = bufferevent_socket_new(g_base, socks[0], 
+                                                                BEV_OPT_CLOSE_ON_FREE);
+        if (!stdin_bev) {
+            printf("无法创建 bufferevent\n");
+            break;
+        }
+        
+        bufferevent_setcb(stdin_bev, stdin_read_cb, NULL, NULL, NULL);
+        bufferevent_enable(stdin_bev, EV_READ);
+#endif        
+    }while(0);
 
     // 注册系统信号
     struct event *sig_int = evsignal_new(g_base, SIGINT, sig_handler, NULL);
@@ -422,10 +742,14 @@ void net_worker(void * arg)
 #endif
 
     printf("Server started. Command sock: %s\n", CMD_SOCK_PATH);
-    event_base_dispatch(g_base);
-    printf("dispatch exited\n");
+    int ret = event_base_dispatch(g_base);
+
+    printf("dispatch exited %d\n", ret);
     event_free(sig_int);
     event_free(sig_term);    
+#ifdef WIN32
+    printf("debug ... cleanup\n");
+#endif    
 }
 
 int main(int argc, char **argv)
@@ -443,6 +767,7 @@ int main(int argc, char **argv)
             return 1;
         }
     }
+
 
     g_log_fp = fopen("trade_api.log", "a");
 

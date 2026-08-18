@@ -66,6 +66,8 @@ struct OrderKey
             return false;
         if( ins != other.ins )
             return false;
+        if( op != other.op )
+            return false;
         return true;
     }
 };
@@ -118,6 +120,7 @@ struct OrderInfo
     long long index; //相同次数
     int dir;
     int vol;
+    int op; //开仓，平仓，撤单;
 };
 
 struct InstrumentInfo
@@ -199,8 +202,10 @@ public:
 
         long long order_cnt;   //报单数统计
         long long cancel_cnt;  //撤单数统计
-
         int is_user_qry_instrument;
+        long long order_cnt2;   //只统计本次登陆报单数统计
+        long long cancel_cnt2;  //只统计本次登陆撤单数统计
+
     }Req;
 
     struct
@@ -218,7 +223,6 @@ private:
     
 	SessionTable selfdeal_map;
     OrderTable   order_map;
-
     sqlite3_stmt *stmt_product_permission;
 
 };
