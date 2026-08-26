@@ -75,19 +75,27 @@ do \
         break;\
     if( pRspInfo->ErrorID == 0 )\
         break;\
-    gbk_printf("%s %s\n", #func,pRspInfo->ErrorMsg);\
-    log_msg("%s %s\n", #func,pRspInfo->ErrorMsg);\
+    gbk_printf("%s %d:%s\n", #func,pRspInfo->ErrorID,pRspInfo->ErrorMsg);\
+    log_msg("%s %d:%s\n", #func,pRspInfo->ErrorID,pRspInfo->ErrorMsg);\
 }while(0) 
 
+#define ShowErrorMsgForce(func) \
+do \
+{\
+    if( !pRspInfo )\
+        break;\
+    gbk_printf("%s %d:%s\n", #func,pRspInfo->ErrorID,pRspInfo->ErrorMsg);\
+    log_msg("%s %d:%s\n", #func,pRspInfo->ErrorID,pRspInfo->ErrorMsg);\
+}while(0) 
 
 #define SpiHelper_OnErrRtn(func,Field) void TradeSessionSpi::func(Field *pRspField, CThostFtdcRspInfoField *pRspInfo) {\
-    ShowErrorMsg(func);\
+    ShowErrorMsgForce(func);\
     TradeSpi_RtnErr( func )\
 }\
 
 #define SpiHelper_OnErrRtnAll(func,Field) void TradeSessionSpi::func(Field *pRspField, CThostFtdcRspInfoField *pRspInfo) {\
     PrintBUIA(func);\
-    ShowErrorMsg(func);\
+    ShowErrorMsgForce(func);\
     if( pRspField )\
     {\
         Safe2_strcpy(pRspField->BrokerID,session->broker.raw_broker.c_str());\
@@ -99,7 +107,7 @@ do \
 }
 #define SpiHelper_OnErrRtnBUV(func,Field) void TradeSessionSpi::func(Field *pRspField, CThostFtdcRspInfoField *pRspInfo) {\
     PrintBUI(func);\
-    ShowErrorMsg(func);\
+    ShowErrorMsgForce(func);\
     if( pRspField )\
     {\
         Safe2_strcpy(pRspField->BrokerID,session->broker.raw_broker.c_str());\
@@ -111,7 +119,7 @@ do \
 
 #define SpiHelper_OnErrRtnBUA(func,Field) void TradeSessionSpi::func(Field *pRspField, CThostFtdcRspInfoField *pRspInfo) {\
     PrintBUA(func);\
-    ShowErrorMsg(func);\
+    ShowErrorMsgForce(func);\
     if( pRspField )\
     {\
         Safe2_strcpy(pRspField->BrokerID,session->broker.raw_broker.c_str());\
@@ -314,6 +322,20 @@ do \
     TradeSpi_Response( func ) \
 }
 
+#define SpiHelper_RspOrderInsert(func,Field) void TradeSessionSpi::func(Field *pRspField,CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) { \
+    if( bIsLast)\
+        PrintBUIA(func);\
+    ShowErrorMsgForce(func);\
+    if( pRspField )\
+    {\
+        Safe2_strcpy(pRspField->BrokerID,session->broker.raw_broker.c_str());\
+        Safe2_strcpy(pRspField->UserID,session->broker.raw_user.c_str());\
+        Safe2_strcpy(pRspField->InvestorID,session->broker.raw_user.c_str());\
+        Safe2_strcpy(pRspField->AccountID,session->broker.raw_user.c_str());\
+    }\
+    TradeSpi_Response( func ) \
+}
+
 TradeSessionSpi::TradeSessionSpi(TradeSession * session_ptr)
 {
 	session = session_ptr;
@@ -370,8 +392,8 @@ void TradeSessionSpi::OnFrontDisconnected(int nReason)
     gbk_printf("交易前置断开连接 reason=%d\n",nReason);
     log_msg("交易前置断开连接 reason=%d\n",nReason);
 	//关闭客户端连接
-    session->CloseClient();
     session->Reset();
+    session->CloseClient();
 }
     
 ///心跳超时警告。当长时间未收到报文时，该方法被调用。
@@ -472,7 +494,7 @@ SpiHelper_Response_BU(OnRspGenUserCaptcha,CThostFtdcRspGenUserCaptchaField)
 SpiHelper_Response(OnRspGenUserText,CThostFtdcRspGenUserTextField)
 
 ///报单录入请求响应
-SpiHelper_Response_All(OnRspOrderInsert,CThostFtdcInputOrderField)
+SpiHelper_RspOrderInsert(OnRspOrderInsert,CThostFtdcInputOrderField)
 
 ///预埋单录入请求响应
 SpiHelper_Response_All(OnRspParkedOrderInsert,CThostFtdcParkedOrderField)
@@ -591,8 +613,10 @@ void TradeSessionSpi::OnRspQryInstrument(CThostFtdcInstrumentField *pRspField,CT
 ///请求查询行情响应
 SpiHelper_Response(OnRspQryDepthMarketData,CThostFtdcDepthMarketDataField)
 
+#if CTP_VER >= 6007010
 ///请求查询交易员报盘机响应
 SpiHelper_Response(OnRspQryTraderOffer,CThostFtdcTraderOfferField)
+#endif
 
 ///请求查询投资者结算结果响应
 SpiHelper_Response_BVA(OnRspQrySettlementInfo,CThostFtdcSettlementInfoField)
@@ -700,17 +724,37 @@ void TradeSessionSpi::OnRspError(CThostFtdcRspInfoField *pRspField, int nRequest
 ///报单通知
 void TradeSessionSpi::OnRtnOrder(CThostFtdcOrderField *pRspField)
 {
+
     session->OnRtnOrder(pRspField); //需要检查订单是否完结，用于自成交数据判断
     if( pRspField )
     {
-//        gbk_printf("%s [%s %.3f %d %d] %s\n","OnRtnOrder",pRspField->InstrumentID,pRspField->LimitPrice,pRspField->VolumeTotalOriginal,pRspField->Direction, pRspField->StatusMsg);
-        log_msg("%s [%s %.3f %d %d] %s\n","OnRtnOrder",pRspField->InstrumentID,pRspField->LimitPrice,pRspField->VolumeTotalOriginal,pRspField->Direction, pRspField->StatusMsg);
+        int is_finish = 0;
+        //处理在途的订单
+        switch(pRspField->OrderStatus) //交易已经完结
+        {//如果是
+        case THOST_FTDC_OST_Canceled:
+        case THOST_FTDC_OST_PartTradedNotQueueing:
+        case THOST_FTDC_OST_NoTradeNotQueueing:
+        case THOST_FTDC_OST_AllTraded:
+            is_finish = 1;
+            break;
+        default:
+            break;
+        }
+        if( THOST_FTDC_OSS_InsertRejected == pRspField->OrderSubmitStatus )
+            is_finish = 1;
+                    
+        if( is_finish )
+            gbk_printf("%s [%s %.4f %d %d] %s\n","OnRtnOrder",pRspField->InstrumentID,pRspField->LimitPrice,pRspField->VolumeTotalOriginal,pRspField->Direction, pRspField->StatusMsg);
+
+        log_msg("%s [%s %.4f %d %d] %s\n","OnRtnOrder",pRspField->InstrumentID,pRspField->LimitPrice,pRspField->VolumeTotalOriginal,pRspField->Direction, pRspField->StatusMsg);
 
         Safe2_strcpy(pRspField->BrokerID,session->broker.raw_broker.c_str());
         Safe2_strcpy(pRspField->UserID,session->broker.raw_user.c_str());
         Safe2_strcpy(pRspField->InvestorID,session->broker.raw_user.c_str());
         Safe2_strcpy(pRspField->AccountID,session->broker.raw_user.c_str());
-    } 
+    }
+
     TradeSpi_Rtn( OnRtnOrder )
 }
 
@@ -875,10 +919,10 @@ SpiHelper_Response(OnRspQryCombPromotionParam,CThostFtdcCombPromotionParamField)
 
 ///投资者风险结算持仓查询响应
 SpiHelper_Response_BV(OnRspQryRiskSettleInvstPosition,CThostFtdcRiskSettleInvstPositionField)
-
-#if CTP_VER  >= 6007010
 ///风险结算产品查询响应
 SpiHelper_Response(OnRspQryRiskSettleProductStatus,CThostFtdcRiskSettleProductStatusField)                                               
+
+#if CTP_VER  >= 6007010
 ///SPBM期货合约参数查询响应
 SpiHelper_Response(OnRspQrySPBMFutureParameter,CThostFtdcSPBMFutureParameterField)
 

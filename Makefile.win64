@@ -1,4 +1,5 @@
 CTP_VERSION := 6.7.13
+#CTP_VERSION := 6.6.1
 
 # 把点号替换成空格，变成列表：6 6 1
 CTP_VER_PARTS := $(subst ., ,$(CTP_VERSION))
@@ -54,7 +55,7 @@ $(TARGET_WIN64):
 	@-mkdir -p $@
 
 clean:
-	rm -rf $(P_WIN64_OBJS) $(PRO_OBJ_win64)
+	rm -rf $(P_WIN64_OBJS_D) $(P_WIN64_OBJS_R)  $(PRO_OBJ_win64).release.exe $(PRO_OBJ_win64).debug.exe
 
 # 声明伪目标，不会和文件重名冲突
 .PHONY: clean

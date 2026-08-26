@@ -340,8 +340,10 @@ int TradeSession::ReadPackage(struct evbuffer *in_buf,PackageData * data)
         }
         if( Api_ReqQryTradingAccount != data->package.header.func_id )
         {
-            printf("===>Field Len=%3d,need =%3d , %s,investor=%s,account=%s,user=%s,broker=%s\n", p0_size,callback->psize[0],callback->name,Req.investor.c_str(),Req.account.c_str(),Req.user.c_str(),Req.broker.c_str());
-            log_msg("===>Field Len=%3d,need =%3d , %s,investor=%s,account=%s,user=%s,broker=%s\n", p0_size,callback->psize[0],callback->name,Req.investor.c_str(),Req.account.c_str(),Req.user.c_str(),Req.broker.c_str());
+            // printf("===>Field Len=%3d,need =%3d , %s,investor=%s,account=%s,user=%s,broker=%s\n", p0_size,callback->psize[0],callback->name,Req.investor.c_str(),Req.account.c_str(),Req.user.c_str(),Req.broker.c_str());
+            // log_msg("===>Field Len=%3d,need =%3d , %s,investor=%s,account=%s,user=%s,broker=%s\n", p0_size,callback->psize[0],callback->name,Req.investor.c_str(),Req.account.c_str(),Req.user.c_str(),Req.broker.c_str());
+            printf("===>Field Len=%3d,need =%3d , %s\n", p0_size,callback->psize[0],callback->name);
+            log_msg("===>Field Len=%3d,need =%3d , %s\n", p0_size,callback->psize[0],callback->name);
         }
 
         if( g_bIsClose )
@@ -357,15 +359,23 @@ int TradeSession::ReadPackage(struct evbuffer *in_buf,PackageData * data)
 
 void TradeSession::CloseClient()
 {
-    int fd = bufferevent_getfd(net.bev);    
-    bufferevent_setfd(net.bev, -1);
-    evutil_closesocket(fd);
+    // int fd = bufferevent_getfd(net.bev);    
+    // bufferevent_setfd(net.bev, -1);
+    // evutil_closesocket(fd);
+
+    bufferevent_setcb(net.bev, NULL, NULL, NULL, NULL); 
+    // 可选：清空读写缓冲区，释放缓冲区内存
+    bufferevent_disable(net.bev, EV_READ|EV_WRITE);
+    // 释放bufferevent，BEV_OPT_CLOSE_ON_FREE 会自动 close socket fd
+    bufferevent_free(net.bev);
+    net.bev = 0;
+
+    delete this;
 
 /**
    Returns the file descriptor associated with a bufferevent, or -1 if
    no file descriptor is associated with the bufferevent.
  */
-evutil_socket_t bufferevent_getfd(struct bufferevent *bufev);    
 }
 
 void TradeSession::OnClientData()
@@ -768,9 +778,9 @@ int TradeSession::ReqOrderInsert(CThostFtdcInputOrderField *pInputOrder, int nRe
     {
         CThostFtdcRspInfoField RspInfo = {0};
         RspInfo.ErrorID = 402;
-        snprintf(RspInfo.ErrorMsg,sizeof(RspInfo.ErrorMsg) -1,"存在自成交风险(%s/%.3f)",pInputOrder->InstrumentID,pInputOrder->LimitPrice);
-        log_msg("存在自成交风险(%s/%.3f | %s),拒绝该订单\n",pInputOrder->InstrumentID,(pInputOrder->LimitPrice + 0.00000001),l_order_dir[ (pInputOrder->Direction - '0') & 0x1]);
-        gbk_printf("存在自成交风险(%s/%.3f | %s),拒绝该订单\n",pInputOrder->InstrumentID,(pInputOrder->LimitPrice + 0.00000001),l_order_dir[ (pInputOrder->Direction - '0') & 0x1]);
+        snprintf(RspInfo.ErrorMsg,sizeof(RspInfo.ErrorMsg) -1,"存在自成交风险(%s/%.4f)",pInputOrder->InstrumentID,pInputOrder->LimitPrice);
+        log_msg("存在自成交风险(%s/%.4f | %s),拒绝该订单\n",pInputOrder->InstrumentID,(pInputOrder->LimitPrice + 0.00000001),l_order_dir[ (pInputOrder->Direction - '0') & 0x1]);
+        gbk_printf("存在自成交风险(%s/%.4f | %s),拒绝该订单\n",pInputOrder->InstrumentID,(pInputOrder->LimitPrice + 0.00000001),l_order_dir[ (pInputOrder->Direction - '0') & 0x1]);
         m_spi->OnRspOrderInsert(pInputOrder, &RspInfo, nRequestID, true) ;
         return 0;
     }
@@ -784,22 +794,24 @@ int TradeSession::ReqOrderInsert(CThostFtdcInputOrderField *pInputOrder, int nRe
             CThostFtdcRspInfoField RspInfo = {0};
             RspInfo.ErrorID = 403;
             strncpy(RspInfo.ErrorMsg,"报单频率超出限制",sizeof(RspInfo.ErrorMsg) -1);
-            log_msg("报单频率超出限制,拒绝该订单 %s %d %.3f | %s\n",pInputOrder->InstrumentID,pInputOrder->VolumeTotalOriginal,(pInputOrder->LimitPrice + 0.00000001), l_order_dir[ (pInputOrder->Direction - '0') & 0x1]);
-            gbk_printf("报单频率超出限制,拒绝该订单 %s %d %.3f | %s\n",pInputOrder->InstrumentID,pInputOrder->VolumeTotalOriginal,(pInputOrder->LimitPrice + 0.00000001), l_order_dir[ (pInputOrder->Direction - '0') & 0x1]);
+            log_msg("报单频率超出限制,拒绝该订单 %s %d %.4f | %s\n",pInputOrder->InstrumentID,pInputOrder->VolumeTotalOriginal,(pInputOrder->LimitPrice + 0.00000001), l_order_dir[ (pInputOrder->Direction - '0') & 0x1]);
+            gbk_printf("报单频率超出限制,拒绝该订单 %s %d %.4f | %s\n",pInputOrder->InstrumentID,pInputOrder->VolumeTotalOriginal,(pInputOrder->LimitPrice + 0.00000001), l_order_dir[ (pInputOrder->Direction - '0') & 0x1]);
 
             m_spi->OnRspOrderInsert(pInputOrder, &RspInfo, nRequestID, true) ;
             return 0;
         }
     }
+#if CTP_VER >= 6007010
     pInputOrder->SessionReqSeq = nRequestID;
+#endif
     
     OrderKey key = {pInputOrder->InstrumentID,price,pInputOrder->Direction,pInputOrder->VolumeTotalOriginal,pInputOrder->CombOffsetFlag[0] == THOST_FTDC_OF_Open ? 1 :0};
     auto order = order_map.find(key);
     if( order != order_map.end() )
     {
         order->second.index++;
-        log_msg("订单 %s(%lld.%03u,%s%s,%d) 重复报单总次数 %d\n",pInputOrder->InstrumentID,price/10000,price%10000,l_order_dir[ (pInputOrder->Direction - '0') & 0x1],l_order_flag[ (pInputOrder->CombOffsetFlag[0] - '0') & 0x1],pInputOrder->VolumeTotalOriginal,order->second.index);
-        gbk_printf("订单 %s(%lld.%03u,%s%s,%d) 重复报单总次数 %d\n",pInputOrder->InstrumentID,price/10000,price%10000,l_order_dir[ (pInputOrder->Direction - '0') & 0x1],l_order_flag[ (pInputOrder->CombOffsetFlag[0] - '0') & 0x1],pInputOrder->VolumeTotalOriginal,order->second.index);
+        log_msg("订单 %s(%lld.%04u,%s%s,%d) 重复报单总次数 %d\n",pInputOrder->InstrumentID,price/10000,price%10000,l_order_dir[ (pInputOrder->Direction - '0') & 0x1],l_order_flag[ (pInputOrder->CombOffsetFlag[0] - '0') & 0x1],pInputOrder->VolumeTotalOriginal,order->second.index);
+        gbk_printf("订单 %s(%lld.%04u,%s%s,%d) 重复报单总次数 %d\n",pInputOrder->InstrumentID,price/10000,price%10000,l_order_dir[ (pInputOrder->Direction - '0') & 0x1],l_order_flag[ (pInputOrder->CombOffsetFlag[0] - '0') & 0x1],pInputOrder->VolumeTotalOriginal,order->second.index);
     }
     else
     {
@@ -810,12 +822,12 @@ int TradeSession::ReqOrderInsert(CThostFtdcInputOrderField *pInputOrder, int nRe
     Req.order_cnt2++;
     if( g_alert_order > 0 && Req.order_cnt2 > g_alert_order )
     {
-        log_msg("!!!! 报单 %s(%lld.%03u,%s%s,%d) 次数 %d 超过预警数量 %d\n",pInputOrder->InstrumentID,price/10000,price%10000,l_order_dir[ (pInputOrder->Direction - '0') & 0x1],l_order_flag[ (pInputOrder->CombOffsetFlag[0] - '0') & 0x1],pInputOrder->VolumeTotalOriginal,Req.order_cnt2,g_alert_order);
-        gbk_printf("!!!! 报单 %s(%lld.%03u,%s%s,%d) 次数 %d 超过预警数量 %d\n",pInputOrder->InstrumentID,price/10000,price%10000,l_order_dir[ (pInputOrder->Direction - '0') & 0x1],l_order_flag[ (pInputOrder->CombOffsetFlag[0] - '0') & 0x1],pInputOrder->VolumeTotalOriginal,Req.order_cnt2,g_alert_order);
+        log_msg("!!!! 报单 %s(%lld.%04u,%s%s,%d) 次数 %d 超过预警数量 %d\n",pInputOrder->InstrumentID,price/10000,price%10000,l_order_dir[ (pInputOrder->Direction - '0') & 0x1],l_order_flag[ (pInputOrder->CombOffsetFlag[0] - '0') & 0x1],pInputOrder->VolumeTotalOriginal,Req.order_cnt2,g_alert_order);
+        gbk_printf("!!!! 报单 %s(%lld.%04u,%s%s,%d) 次数 %d 超过预警数量 %d\n",pInputOrder->InstrumentID,price/10000,price%10000,l_order_dir[ (pInputOrder->Direction - '0') & 0x1],l_order_flag[ (pInputOrder->CombOffsetFlag[0] - '0') & 0x1],pInputOrder->VolumeTotalOriginal,Req.order_cnt2,g_alert_order);
     }
     else{
-        log_msg("发起报单 %s(%lld.%03u,%s%s,%d) \n",pInputOrder->InstrumentID,price/10000,price%10000,l_order_dir[ (pInputOrder->Direction - '0') & 0x1],l_order_flag[ (pInputOrder->CombOffsetFlag[0] - '0') & 0x1],pInputOrder->VolumeTotalOriginal,order->second.index);
-        gbk_printf("发起报单 %s(%lld.%03u,%s%s,%d) \n",pInputOrder->InstrumentID,price/10000,price%10000,l_order_dir[ (pInputOrder->Direction - '0') & 0x1],l_order_flag[ (pInputOrder->CombOffsetFlag[0] - '0') & 0x1],pInputOrder->VolumeTotalOriginal,order->second.index);
+        log_msg("发起报单 %s(%lld.%04u,%s%s,%d) \n",pInputOrder->InstrumentID,price/10000,price%10000,l_order_dir[ (pInputOrder->Direction - '0') & 0x1],l_order_flag[ (pInputOrder->CombOffsetFlag[0] - '0') & 0x1],pInputOrder->VolumeTotalOriginal,order->second.index);
+        gbk_printf("发起报单 %s(%lld.%04u,%s%s,%d) \n",pInputOrder->InstrumentID,price/10000,price%10000,l_order_dir[ (pInputOrder->Direction - '0') & 0x1],l_order_flag[ (pInputOrder->CombOffsetFlag[0] - '0') & 0x1],pInputOrder->VolumeTotalOriginal,order->second.index);
     }
 
     return m_api->ReqOrderInsert(pInputOrder,nRequestID);
@@ -920,8 +932,8 @@ void TradeSession::OnRtnOrder(CThostFtdcOrderField *pRspField)
                 if( order != order_map.end() )
                 {
                     order->second.index++;
-                    log_msg("订单 %s(%lld.%03u,%d,%s%s) 重复撤单总次数 %d\n",pRspField->InstrumentID,iter->second.price/10000,iter->second.price%10000,iter->second.vol,   l_order_dir[(iter->second.dir - '0') & 0x1],l_order_flag[(pRspField->CombOffsetFlag[0] - '0') & 0x1],order->second.index);
-                    gbk_printf("订单 %s(%lld.%03u,%d,%s%s) 重复撤单总次数 %d\n",pRspField->InstrumentID,iter->second.price/10000,iter->second.price%10000,iter->second.vol,l_order_dir[(iter->second.dir - '0') & 0x1],l_order_flag[(pRspField->CombOffsetFlag[0] - '0') & 0x1],order->second.index);
+                    log_msg("订单 %s(%lld.%04u,%d,%s%s) 重复撤单总次数 %d\n",pRspField->InstrumentID,iter->second.price/10000,iter->second.price%10000,iter->second.vol,   l_order_dir[(iter->second.dir - '0') & 0x1],l_order_flag[(pRspField->CombOffsetFlag[0] - '0') & 0x1],order->second.index);
+                    gbk_printf("订单 %s(%lld.%04u,%d,%s%s) 重复撤单总次数 %d\n",pRspField->InstrumentID,iter->second.price/10000,iter->second.price%10000,iter->second.vol,l_order_dir[(iter->second.dir - '0') & 0x1],l_order_flag[(pRspField->CombOffsetFlag[0] - '0') & 0x1],order->second.index);
                 }
                 else
                     order_map[okey] = iter->second;

@@ -153,6 +153,7 @@ CThostFtdcTraderApi * TradeMgr::CreateApi(bool blsProductionMode ,const char * t
 
     mkdir_dir_each(tmp_dir,00750);
 	CThostFtdcTraderApi * api = 0;
+	printf("######### api_ver = %d,blsProductionMode = %d\n",api_ver,blsProductionMode);
 	if( api_ver == 0 )
 		api = create_func.v1( tmp_dir );
 	else

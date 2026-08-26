@@ -51,8 +51,10 @@ TradeApi_FunctionInfo api_function_list[Api_Count] =
 	Declare2Func_B_U(RegisterUserSystemInfo,CThostFtdcUserSystemInfoField ),
 	Declare2Func_B_U(SubmitUserSystemInfo,CThostFtdcUserSystemInfoField ),
 
+#if CTP_VER >= 6007010
 	Declare2Func_B_U(RegisterWechatUserSystemInfo,CThostFtdcWechatUserSystemInfoField ),
 	Declare2Func_B_U(SubmitWechatUserSystemInfo,CThostFtdcWechatUserSystemInfoField ),
+#endif
 
 	PreCheckFunc_2(ReqUserLogin,CThostFtdcReqUserLoginField ),
 	Declare2Func_B_U(ReqUserLogout,CThostFtdcUserLogoutField ),
@@ -102,7 +104,10 @@ TradeApi_FunctionInfo api_function_list[Api_Count] =
 	Declare2Func_2(ReqQryProduct,CThostFtdcQryProductField ),
 	Declare2Func_2(ReqQryInstrument,CThostFtdcQryInstrumentField ),
 	Declare2Func_2(ReqQryDepthMarketData,CThostFtdcQryDepthMarketDataField ),
+#if CTP_VER >= 6007010	
 	Declare2Func_2(ReqQryTraderOffer,CThostFtdcQryTraderOfferField ),
+#endif
+
 	Declare2Func_B_V(ReqQrySettlementInfo,CThostFtdcQrySettlementInfoField ),
 	Declare2Func_2(ReqQryTransferBank,CThostFtdcQryTransferBankField ),
 	Declare2Func_B_V(ReqQryInvestorPositionDetail,CThostFtdcQryInvestorPositionDetailField ),
@@ -149,6 +154,7 @@ TradeApi_FunctionInfo api_function_list[Api_Count] =
 	Declare2Func_2(ReqQryCombPromotionParam,CThostFtdcQryCombPromotionParamField ),
 	Declare2Func_B_V(ReqQryRiskSettleInvstPosition,CThostFtdcQryRiskSettleInvstPositionField ),
 	Declare2Func_2(ReqQryRiskSettleProductStatus,CThostFtdcQryRiskSettleProductStatusField ),
+#if CTP_VER >= 6007010
 	Declare2Func_2(ReqQrySPBMFutureParameter,CThostFtdcQrySPBMFutureParameterField ),
 	Declare2Func_2(ReqQrySPBMOptionParameter,CThostFtdcQrySPBMOptionParameterField ),
 	Declare2Func_2(ReqQrySPBMIntraParameter,CThostFtdcQrySPBMIntraParameterField ),
@@ -180,6 +186,8 @@ TradeApi_FunctionInfo api_function_list[Api_Count] =
 	Declare2Func_all(ReqOffsetSetting,CThostFtdcInputOffsetSettingField ),
 	Declare2Func_all(ReqCancelOffsetSetting,CThostFtdcInputOffsetSettingField ),
 	Declare2Func_B_V(ReqQryOffsetSetting,CThostFtdcQryOffsetSettingField )
+#endif
+	
 };
 
 
