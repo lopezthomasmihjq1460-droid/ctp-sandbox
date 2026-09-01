@@ -203,6 +203,7 @@ int TradeSession::ReadPackage(struct evbuffer *in_buf,PackageData * data)
         if( data->package.header.func_id >= Api_Count )
         {
             printf("===> data->package.header.func_id =%d !!!!!\n",data->package.header.func_id);
+            log_msg("===> data->package.header.func_id =%d !!!!!\n",data->package.header.func_id);
             break; //这里一定出错了
         }
 
@@ -210,13 +211,21 @@ int TradeSession::ReadPackage(struct evbuffer *in_buf,PackageData * data)
         if( data->package.header.p_cnt > 8 )
         {
             printf("===> %s , p_cnt = %d !!!!!\n",callback->name,data->package.header.p_cnt);
+            log_msg("===> %s , p_cnt = %d !!!!!\n",callback->name,data->package.header.p_cnt);
             break; //这里一定出错了
         }
-
 
         if( callback->p_cnt != data->package.header.p_cnt )
         {
             printf("===> %s , p_cnt = %d !!!!!\n",callback->name,data->package.header.p_cnt);
+            log_msg("===> %s , p_cnt = %d !!!!!\n",callback->name,data->package.header.p_cnt);
+            break; //参数数量不匹配，这里一定出错了
+        }
+
+        if( callback->func_0 == nullptr )
+        {
+            printf("===> %s , 暂不支持 的API !!!!!\n",callback->name);
+            log_msg("===> %s , 暂不支持 的API !!!!!\n",callback->name);
             break; //参数数量不匹配，这里一定出错了
         }
 
@@ -338,13 +347,7 @@ int TradeSession::ReadPackage(struct evbuffer *in_buf,PackageData * data)
             Req.is_user_qry_instrument = 1;
             printf("is_user_qry_instrument = 1\n");
         }
-        if( Api_ReqQryTradingAccount != data->package.header.func_id )
-        {
-            // printf("===>Field Len=%3d,need =%3d , %s,investor=%s,account=%s,user=%s,broker=%s\n", p0_size,callback->psize[0],callback->name,Req.investor.c_str(),Req.account.c_str(),Req.user.c_str(),Req.broker.c_str());
-            // log_msg("===>Field Len=%3d,need =%3d , %s,investor=%s,account=%s,user=%s,broker=%s\n", p0_size,callback->psize[0],callback->name,Req.investor.c_str(),Req.account.c_str(),Req.user.c_str(),Req.broker.c_str());
-            printf("===>Field Len=%3d,need =%3d , %s\n", p0_size,callback->psize[0],callback->name);
-            log_msg("===>Field Len=%3d,need =%3d , %s\n", p0_size,callback->psize[0],callback->name);
-        }
+
 
         if( g_bIsClose )
         {
@@ -352,7 +355,16 @@ int TradeSession::ReadPackage(struct evbuffer *in_buf,PackageData * data)
             log_msg("===>Field Len=%3d,need =%3d , %s,账户当前被禁用\n", p0_size,callback->psize[0],callback->name); 
         }
         else
+        {
+            if( Api_ReqQryTradingAccount != data->package.header.func_id )
+            {
+                // printf("===>Field Len=%3d,need =%3d , %s,investor=%s,account=%s,user=%s,broker=%s\n", p0_size,callback->psize[0],callback->name,Req.investor.c_str(),Req.account.c_str(),Req.user.c_str(),Req.broker.c_str());
+                // log_msg("===>Field Len=%3d,need =%3d , %s,investor=%s,account=%s,user=%s,broker=%s\n", p0_size,callback->psize[0],callback->name,Req.investor.c_str(),Req.account.c_str(),Req.user.c_str(),Req.broker.c_str());
+                printf("===>Field Len=%3d,need =%3d , %s,id=%d\n", p0_size,callback->psize[0],callback->name,data->package.header.func_id);
+                log_msg("===>Field Len=%3d,need =%3d , %s,id=%d\n", p0_size,callback->psize[0],callback->name,data->package.header.func_id);
+            }            
             funcArr[callback->is_precheck][callback->p_cnt](this,callback);
+        }
     }while(0);
     return readable;
 }

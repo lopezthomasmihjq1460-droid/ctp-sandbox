@@ -34,6 +34,8 @@ TradeApi_FunctionInfo api_function_list[Api_Count] =
 	Declare2Func_0(GetTradingDay),
 #if CTP_VER >= 6007010
 	Declare2Func_1(GetFrontInfo,CThostFtdcFrontInfoField),
+#else
+	Declare2Func_nil(GetFrontInfo,char),
 #endif
 	Declare2Func_1(RegisterFront, char *), //需要单独配置调用
 	Declare2Func_1(RegisterNameServer,char *),
@@ -54,6 +56,9 @@ TradeApi_FunctionInfo api_function_list[Api_Count] =
 #if CTP_VER >= 6007010
 	Declare2Func_B_U(RegisterWechatUserSystemInfo,CThostFtdcWechatUserSystemInfoField ),
 	Declare2Func_B_U(SubmitWechatUserSystemInfo,CThostFtdcWechatUserSystemInfoField ),
+#else
+	Declare2Func_nil(RegisterWechatUserSystemInfo,char),
+	Declare2Func_nil(SubmitWechatUserSystemInfo,char),
 #endif
 
 	PreCheckFunc_2(ReqUserLogin,CThostFtdcReqUserLoginField ),
@@ -106,6 +111,8 @@ TradeApi_FunctionInfo api_function_list[Api_Count] =
 	Declare2Func_2(ReqQryDepthMarketData,CThostFtdcQryDepthMarketDataField ),
 #if CTP_VER >= 6007010	
 	Declare2Func_2(ReqQryTraderOffer,CThostFtdcQryTraderOfferField ),
+#else
+	Declare2Func_nil(ReqQryTraderOffer,char),
 #endif
 
 	Declare2Func_B_V(ReqQrySettlementInfo,CThostFtdcQrySettlementInfoField ),
@@ -186,6 +193,38 @@ TradeApi_FunctionInfo api_function_list[Api_Count] =
 	Declare2Func_all(ReqOffsetSetting,CThostFtdcInputOffsetSettingField ),
 	Declare2Func_all(ReqCancelOffsetSetting,CThostFtdcInputOffsetSettingField ),
 	Declare2Func_B_V(ReqQryOffsetSetting,CThostFtdcQryOffsetSettingField )
+#else
+	Declare2Func_nil(ReqQrySPBMFutureParameter,char ),
+	Declare2Func_nil(ReqQrySPBMOptionParameter,char ),
+	Declare2Func_nil(ReqQrySPBMIntraParameter,char ),
+	Declare2Func_nil(ReqQrySPBMInterParameter,char ),
+
+	Declare2Func_nil(ReqQrySPBMPortfDefinition,char ),
+	Declare2Func_nil(ReqQrySPBMInvestorPortfDef,char ),
+	Declare2Func_nil(ReqQryInvestorPortfMarginRatio,char ),
+	Declare2Func_nil(ReqQryInvestorProdSPBMDetail,char ),
+	Declare2Func_nil(ReqQryInvestorCommoditySPMMMargin,char ),
+	Declare2Func_nil(ReqQryInvestorCommodityGroupSPMMMargin,char ),
+	Declare2Func_nil(ReqQrySPMMInstParam,char ),
+	Declare2Func_nil(ReqQrySPMMProductParam,char ),
+	Declare2Func_nil(ReqQrySPBMAddOnInterParameter,char ),
+	Declare2Func_nil(ReqQryRCAMSCombProductInfo,char ),
+	Declare2Func_nil(ReqQryRCAMSInstrParameter,char ),
+	Declare2Func_nil(ReqQryRCAMSIntraParameter,char ),
+	Declare2Func_nil(ReqQryRCAMSInterParameter,char ),
+	Declare2Func_nil(ReqQryRCAMSShortOptAdjustParam,char ),
+	Declare2Func_nil(ReqQryRCAMSInvestorCombPosition,char ),
+	Declare2Func_nil(ReqQryInvestorProdRCAMSMargin,char ),
+	Declare2Func_nil(ReqQryRULEInstrParameter,char ),
+	Declare2Func_nil(ReqQryRULEIntraParameter,char ),
+	Declare2Func_nil(ReqQryRULEInterParameter,char ),
+	Declare2Func_nil(ReqQryInvestorProdRULEMargin,char ),
+	Declare2Func_nil(ReqQryInvestorPortfSetting,char ),
+	Declare2Func_nil(ReqQryInvestorInfoCommRec,char ),
+	Declare2Func_nil(ReqQryCombLeg,char ),
+	Declare2Func_nil(ReqOffsetSetting,char ),
+	Declare2Func_nil(ReqCancelOffsetSetting,char ),
+	Declare2Func_nil(ReqQryOffsetSetting,char )
 #endif
 	
 };
