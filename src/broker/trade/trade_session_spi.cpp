@@ -371,11 +371,14 @@ void TradeSessionSpi::OnFrontConnected()
 
     CThostFtdcReqAuthenticateField field;
     memset(&field,0,sizeof(field));
-    Safe_strcpy(field.BrokerID, session->broker_id.c_str() );
-    Safe_strcpy(field.UserID,session->user_id.c_str() );
+    Safe_strcpy(field.BrokerID, session->broker.broker_id.c_str() );
+    Safe_strcpy(field.UserID,session->broker.account.c_str() );
     Safe_strcpy(field.UserProductInfo,"TradeSandbox" );
     Safe_strcpy(field.AppID,g_app_id.c_str());
     Safe_strcpy(field.AuthCode,g_auth_code.c_str());
+
+    // gbk_printf("ReqAuthenticate %s %s %s\n",field.BrokerID,field.AuthCode,field.UserID);
+    // log_msg("ReqAuthenticate %s %s %s\n",field.BrokerID,field.AuthCode,field.UserID);
 
     session->m_api->ReqAuthenticate(&field, session->requestId);
 }
@@ -406,6 +409,32 @@ void TradeSessionSpi::OnHeartBeatWarning(int nTimeLapse)
 void TradeSessionSpi::OnRspAuthenticate(CThostFtdcRspAuthenticateField *pRspField, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) 
 {
 	//TradeSpi_Response(OnRspAuthenticate);
+    gbk_printf("OnRspAuthenticate pRspInfo = %p\n",pRspInfo);
+    log_msg("OnRspAuthenticate pRspInfo = %p\n",pRspInfo);
+
+    do 
+    {
+        if( !pRspInfo )
+            break;
+        if( pRspInfo->ErrorID == 0 )
+            break;
+        gbk_printf("%s %d:%s\n", "OnRspAuthenticate",pRspInfo->ErrorID,pRspInfo->ErrorMsg);
+        log_msg("%s %d:%s\n", "OnRspAuthenticate",pRspInfo->ErrorID,pRspInfo->ErrorMsg);
+
+        CThostFtdcRspUserLoginField RspField = {0};
+        CThostFtdcRspInfoField RspInfo;
+
+        RspInfo.ErrorID = 48;
+        strncpy(RspInfo.ErrorMsg,"客户端未认证通过",sizeof(RspInfo.ErrorMsg) -1);
+        strncpy(RspField.BrokerID,session->broker.raw_broker.c_str(),sizeof(RspField.BrokerID) - 1);
+        strncpy(RspField.UserID,session->broker.raw_user.c_str(),sizeof(RspField.UserID) - 1);
+        
+        session->m_spi->OnRspUserLogin(&RspField, &RspInfo, nRequestID, true) ;
+
+        return;
+    }while(0) ;
+
+//    gbk_printf("ReqUserLogin (%s %s %s)\n",session->loginField.BrokerID,session->loginField.UserID,session->loginField.Password);
     session->m_api->ReqUserLogin(&session->loginField, session->loginRequestId);
 }
 

@@ -752,6 +752,44 @@ void net_worker(void * arg)
 #endif    
 }
 
+
+
+void disable_console_edit()
+{
+#ifdef WIN32
+	HANDLE hStdin;
+	DWORD mode;
+
+	hStdin = GetStdHandle(STD_INPUT_HANDLE);
+	GetConsoleMode(hStdin,&mode);
+	mode &= ~ENABLE_QUICK_EDIT_MODE;
+	mode &= ~ENABLE_INSERT_MODE;
+	mode &= ~ENABLE_MOUSE_INPUT;
+
+	SetConsoleMode(hStdin,mode);
+#endif
+}
+
+void disable_console_close()
+{
+#ifdef WIN32
+	//DeleteMenu(GetSystemMenu(GetConsoleWindow(),FALSE),SC_CLOSE,MF_BYCOMMAND );
+	EnableMenuItem(GetSystemMenu(GetConsoleWindow(),FALSE), SC_CLOSE, MF_GRAYED | MF_BYCOMMAND);	
+	DrawMenuBar(GetConsoleWindow());
+#endif
+}
+
+void enable_console_close()
+{
+#ifdef WIN32
+//	EnableMenu(GetSystemMenu(GetConsoleWindow(),FALSE),SC_CLOSE,MF_BYCOMMAND);
+//	DrawMenuBar(GetConsoleWindow());
+	EnableMenuItem(GetSystemMenu(GetConsoleWindow(),FALSE), SC_CLOSE, MF_ENABLED | MF_BYCOMMAND);	
+	//EnableMenuItem(GetSystemMenu(GetConsoleWindow(),FALSE), SC_CLOSE, (uint)(MF_ENABLED | (bEnabled ? MF_ENABLED : MF_GRAYED)));	
+	DrawMenuBar(GetConsoleWindow());
+#endif
+}
+
 int main(int argc, char **argv)
 {
     // 屏蔽SIGPIPE
@@ -786,10 +824,14 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    disable_console_edit();
+    disable_console_close();
+
     net_worker(nullptr);
     //std::thread thread = std::thread(net_worker, nullptr);
 
     //thread.join();
+    enable_console_close();
 
     // 循环退出后资源释放
     printf("net_worker exit \n");
@@ -800,7 +842,6 @@ int main(int argc, char **argv)
     WSACleanup();
 #endif
     
-
     delete g_ctp_mgr;
     g_ctp_mgr = 0;
     unlink(CMD_SOCK_PATH);

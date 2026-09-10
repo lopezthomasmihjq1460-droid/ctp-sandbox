@@ -155,11 +155,9 @@ public:
 	int ReqTradingAccountPasswordUpdate(CThostFtdcTradingAccountPasswordUpdateField *pTradingAccountPasswordUpdate, int nRequestID) ;
     int ReqOrderAction(CThostFtdcInputOrderActionField *pInputOrderAction, int nRequestID);
 public:
-
+    CThostFtdcTraderSpi * m_spi;
     TradeSessionNetData net;
 
-    std::string broker_id;
-    std::string user_id;
     int requestId;
     int loginRequestId;
 
@@ -214,8 +212,6 @@ public:
         unsigned int actionDay;
     }day;
 private:
-
-    CThostFtdcTraderSpi * m_spi;
 
     int ReadPackage(struct evbuffer *in_buf,PackageData * data);
     bool CheckProductPermission(const char * product_id);

@@ -502,6 +502,7 @@ int TradeSession::ReqUserLogin(CThostFtdcReqUserLoginField *pReqField, int reque
         return 1;
     }
 
+
     broker.raw_user = pReqField->UserID;
     broker.raw_broker = pReqField->BrokerID;
     broker.broker_id = broker_id;
