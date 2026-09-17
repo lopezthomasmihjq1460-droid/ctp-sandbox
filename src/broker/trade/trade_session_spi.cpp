@@ -283,6 +283,16 @@ do \
     TradeSpi_Response( func ) \
 }
 
+#define SpiHelper_Response_BV_noprint(func,Field) void TradeSessionSpi::func(Field *pRspField,CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) { \
+    ShowErrorMsg(func);\
+    if( pRspField ) \
+    {\
+        Safe2_strcpy(pRspField->BrokerID,session->broker.raw_broker.c_str());\
+        Safe2_strcpy(pRspField->InvestorID,session->broker.raw_user.c_str());\
+    }\
+    TradeSpi_Response( func ) \
+}
+
 #define SpiHelper_Response_BUV(func,Field) void TradeSessionSpi::func(Field *pRspField,CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) { \
     if( bIsLast)\
         PrintBUI(func);\
@@ -592,10 +602,10 @@ SpiHelper_Response_BV(OnRspQryInvestor,CThostFtdcInvestorField)
 SpiHelper_Response_BV(OnRspQryTradingCode,CThostFtdcTradingCodeField)
 
 ///请求查询合约保证金率响应
-SpiHelper_Response_BV(OnRspQryInstrumentMarginRate,CThostFtdcInstrumentMarginRateField)
+SpiHelper_Response_BV_noprint(OnRspQryInstrumentMarginRate,CThostFtdcInstrumentMarginRateField)
 
 ///请求查询合约手续费率响应
-SpiHelper_Response_BV(OnRspQryInstrumentCommissionRate,CThostFtdcInstrumentCommissionRateField)
+SpiHelper_Response_BV_noprint(OnRspQryInstrumentCommissionRate,CThostFtdcInstrumentCommissionRateField)
 
 #if CTP_VER >= 6007011
 ///请求查询用户会话响应

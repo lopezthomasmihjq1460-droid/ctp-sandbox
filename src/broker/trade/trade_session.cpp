@@ -37,7 +37,7 @@ extern bool g_bIsPause ;
 
 extern long long g_alert_order ;
 extern long long g_alert_cancel ;
-
+extern bool g_test_mode ;
 
 
 void gbk_printf(const char *fmt, ...);
@@ -356,13 +356,17 @@ int TradeSession::ReadPackage(struct evbuffer *in_buf,PackageData * data)
         }
         else
         {
-            if( Api_ReqQryTradingAccount != data->package.header.func_id )
+            do
             {
-                // printf("===>Field Len=%3d,need =%3d , %s,investor=%s,account=%s,user=%s,broker=%s\n", p0_size,callback->psize[0],callback->name,Req.investor.c_str(),Req.account.c_str(),Req.user.c_str(),Req.broker.c_str());
-                // log_msg("===>Field Len=%3d,need =%3d , %s,investor=%s,account=%s,user=%s,broker=%s\n", p0_size,callback->psize[0],callback->name,Req.investor.c_str(),Req.account.c_str(),Req.user.c_str(),Req.broker.c_str());
-                printf("===>Field Len=%3d,need =%3d , %s,id=%d\n", p0_size,callback->psize[0],callback->name,data->package.header.func_id);
-                log_msg("===>Field Len=%3d,need =%3d , %s,id=%d\n", p0_size,callback->psize[0],callback->name,data->package.header.func_id);
-            }            
+                if( Api_ReqQryInstrumentMarginRate == data->package.header.func_id )
+                    break;
+                if( Api_ReqQryInstrumentCommissionRate == data->package.header.func_id )
+                    break; 
+                if( Api_ReqQryTradingAccount == data->package.header.func_id )
+                    break;
+                printf("===>Field Len=%3d,need =%3d , %s,id=%d\n", p0_size,callback->psize[0],callback->name,data->package.header.func_id);                
+            }while(0);
+            log_msg("===>Field Len=%3d,need =%3d , %s,id=%d\n", p0_size,callback->psize[0],callback->name,data->package.header.func_id);
             funcArr[callback->is_precheck][callback->p_cnt](this,callback);
         }
     }while(0);
@@ -694,6 +698,9 @@ int TradeSession::ReqTradingAccountPasswordUpdate(CThostFtdcTradingAccountPasswo
 
 int TradeSession::ReqOrderInsert(CThostFtdcInputOrderField *pInputOrder, int nRequestID)
 {
+    //0、检查合约是否存在，价格是否符合要求
+    long long price = (pInputOrder->LimitPrice + 0.00000001)*10000; //价格转换为整数，方便比较
+
     if( g_bIsPause || g_bIsClose)
     {
         CThostFtdcRspInfoField RspInfo = {0};
@@ -705,11 +712,12 @@ int TradeSession::ReqOrderInsert(CThostFtdcInputOrderField *pInputOrder, int nRe
 
         return 0;
     }
-    //0、检查合约是否存在，价格是否符合要求
-    long long price = (pInputOrder->LimitPrice + 0.00000001)*10000; //价格转换为整数，方便比较
-
+    
     do
     {
+        if( !g_test_mode )
+            break;
+
         if( g_instrument_tradingday != day.tradingDay || g_instrument_day != day.actionDay )
         {
             //需要重查合约
@@ -818,29 +826,32 @@ int TradeSession::ReqOrderInsert(CThostFtdcInputOrderField *pInputOrder, int nRe
     pInputOrder->SessionReqSeq = nRequestID;
 #endif
     
-    OrderKey key = {pInputOrder->InstrumentID,price,pInputOrder->Direction,pInputOrder->VolumeTotalOriginal,pInputOrder->CombOffsetFlag[0] == THOST_FTDC_OF_Open ? 1 :0};
-    auto order = order_map.find(key);
-    if( order != order_map.end() )
+    if( g_test_mode )
     {
-        order->second.index++;
-        log_msg("订单 %s(%lld.%04u,%s%s,%d) 重复报单总次数 %d\n",pInputOrder->InstrumentID,price/10000,price%10000,l_order_dir[ (pInputOrder->Direction - '0') & 0x1],l_order_flag[ (pInputOrder->CombOffsetFlag[0] - '0') & 0x1],pInputOrder->VolumeTotalOriginal,order->second.index);
-        gbk_printf("订单 %s(%lld.%04u,%s%s,%d) 重复报单总次数 %d\n",pInputOrder->InstrumentID,price/10000,price%10000,l_order_dir[ (pInputOrder->Direction - '0') & 0x1],l_order_flag[ (pInputOrder->CombOffsetFlag[0] - '0') & 0x1],pInputOrder->VolumeTotalOriginal,order->second.index);
-    }
-    else
-    {
-        order_map[key] = {price,1,pInputOrder->Direction,pInputOrder->VolumeTotalOriginal};
-        order = order_map.find(key);
-    }
+        OrderKey key = {pInputOrder->InstrumentID,price,pInputOrder->Direction,pInputOrder->VolumeTotalOriginal,pInputOrder->CombOffsetFlag[0] == THOST_FTDC_OF_Open ? 1 :0};
+        auto order = order_map.find(key);
+        if( order != order_map.end() )
+        {
+            order->second.index++;
+            log_msg("订单 %s(%lld.%04u,%s%s,%d) 重复报单总次数 %d\n",pInputOrder->InstrumentID,price/10000,price%10000,l_order_dir[ (pInputOrder->Direction - '0') & 0x1],l_order_flag[ (pInputOrder->CombOffsetFlag[0] - '0') & 0x1],pInputOrder->VolumeTotalOriginal,order->second.index);
+            gbk_printf("订单 %s(%lld.%04u,%s%s,%d) 重复报单总次数 %d\n",pInputOrder->InstrumentID,price/10000,price%10000,l_order_dir[ (pInputOrder->Direction - '0') & 0x1],l_order_flag[ (pInputOrder->CombOffsetFlag[0] - '0') & 0x1],pInputOrder->VolumeTotalOriginal,order->second.index);
+        }
+        else
+        {
+            order_map[key] = {price,1,pInputOrder->Direction,pInputOrder->VolumeTotalOriginal};
+            order = order_map.find(key);
+        }
 
-    Req.order_cnt2++;
-    if( g_alert_order > 0 && Req.order_cnt2 > g_alert_order )
-    {
-        log_msg("!!!! 报单 %s(%lld.%04u,%s%s,%d) 次数 %d 超过预警数量 %d\n",pInputOrder->InstrumentID,price/10000,price%10000,l_order_dir[ (pInputOrder->Direction - '0') & 0x1],l_order_flag[ (pInputOrder->CombOffsetFlag[0] - '0') & 0x1],pInputOrder->VolumeTotalOriginal,Req.order_cnt2,g_alert_order);
-        gbk_printf("!!!! 报单 %s(%lld.%04u,%s%s,%d) 次数 %d 超过预警数量 %d\n",pInputOrder->InstrumentID,price/10000,price%10000,l_order_dir[ (pInputOrder->Direction - '0') & 0x1],l_order_flag[ (pInputOrder->CombOffsetFlag[0] - '0') & 0x1],pInputOrder->VolumeTotalOriginal,Req.order_cnt2,g_alert_order);
-    }
-    else{
-        log_msg("发起报单 %s(%lld.%04u,%s%s,%d) \n",pInputOrder->InstrumentID,price/10000,price%10000,l_order_dir[ (pInputOrder->Direction - '0') & 0x1],l_order_flag[ (pInputOrder->CombOffsetFlag[0] - '0') & 0x1],pInputOrder->VolumeTotalOriginal,order->second.index);
-        gbk_printf("发起报单 %s(%lld.%04u,%s%s,%d) \n",pInputOrder->InstrumentID,price/10000,price%10000,l_order_dir[ (pInputOrder->Direction - '0') & 0x1],l_order_flag[ (pInputOrder->CombOffsetFlag[0] - '0') & 0x1],pInputOrder->VolumeTotalOriginal,order->second.index);
+        Req.order_cnt2++;
+        if( g_alert_order > 0 && Req.order_cnt2 > g_alert_order )
+        {
+            log_msg("!!!! 报单 %s(%lld.%04u,%s%s,%d) 次数 %d 超过预警数量 %d\n",pInputOrder->InstrumentID,price/10000,price%10000,l_order_dir[ (pInputOrder->Direction - '0') & 0x1],l_order_flag[ (pInputOrder->CombOffsetFlag[0] - '0') & 0x1],pInputOrder->VolumeTotalOriginal,Req.order_cnt2,g_alert_order);
+            gbk_printf("!!!! 报单 %s(%lld.%04u,%s%s,%d) 次数 %d 超过预警数量 %d\n",pInputOrder->InstrumentID,price/10000,price%10000,l_order_dir[ (pInputOrder->Direction - '0') & 0x1],l_order_flag[ (pInputOrder->CombOffsetFlag[0] - '0') & 0x1],pInputOrder->VolumeTotalOriginal,Req.order_cnt2,g_alert_order);
+        }
+        else{
+            log_msg("发起报单 %s(%lld.%04u,%s%s,%d) \n",pInputOrder->InstrumentID,price/10000,price%10000,l_order_dir[ (pInputOrder->Direction - '0') & 0x1],l_order_flag[ (pInputOrder->CombOffsetFlag[0] - '0') & 0x1],pInputOrder->VolumeTotalOriginal,order->second.index);
+            gbk_printf("发起报单 %s(%lld.%04u,%s%s,%d) \n",pInputOrder->InstrumentID,price/10000,price%10000,l_order_dir[ (pInputOrder->Direction - '0') & 0x1],l_order_flag[ (pInputOrder->CombOffsetFlag[0] - '0') & 0x1],pInputOrder->VolumeTotalOriginal,order->second.index);
+        }
     }
 
     return m_api->ReqOrderInsert(pInputOrder,nRequestID);
@@ -876,17 +887,19 @@ int TradeSession::ReqOrderAction(CThostFtdcInputOrderActionField *pInputOrderAct
     }
     Req.cancel_cnt2++;
 
-    if( g_alert_cancel > 0 && Req.cancel_cnt2 > g_alert_cancel )
+    if( g_test_mode )
     {
-        log_msg("!!!! 撤单 %s ref=%s SysID=%s,总撤单数 %lld 超过预警数量 %d\n",pInputOrderAction->InstrumentID,pInputOrderAction->OrderRef,pInputOrderAction->OrderSysID,Req.cancel_cnt2,g_alert_cancel);
-        gbk_printf("!!!! 请求撤单 %s ref=%s SysID=%s,总撤单数 %lld 超过预警数量 %d\n",pInputOrderAction->InstrumentID,pInputOrderAction->OrderRef,pInputOrderAction->OrderSysID,Req.cancel_cnt2,g_alert_cancel);
+        if( g_alert_cancel > 0 && Req.cancel_cnt2 > g_alert_cancel )
+        {
+            log_msg("!!!! 撤单 %s ref=%s SysID=%s,总撤单数 %lld 超过预警数量 %d\n",pInputOrderAction->InstrumentID,pInputOrderAction->OrderRef,pInputOrderAction->OrderSysID,Req.cancel_cnt2,g_alert_cancel);
+            gbk_printf("!!!! 请求撤单 %s ref=%s SysID=%s,总撤单数 %lld 超过预警数量 %d\n",pInputOrderAction->InstrumentID,pInputOrderAction->OrderRef,pInputOrderAction->OrderSysID,Req.cancel_cnt2,g_alert_cancel);
+        }
+        else
+        {
+            log_msg("请求撤单 %s ref=%s SysID=%s,总撤单数 %lld\n",pInputOrderAction->InstrumentID,pInputOrderAction->OrderRef,pInputOrderAction->OrderSysID,Req.cancel_cnt2);
+            gbk_printf("请求撤单 %s ref=%s SysID=%s,总撤单数 %lld\n",pInputOrderAction->InstrumentID,pInputOrderAction->OrderRef,pInputOrderAction->OrderSysID,Req.cancel_cnt2);
+        }
     }
-    else
-    {
-        log_msg("请求撤单 %s ref=%s SysID=%s,总撤单数 %lld\n",pInputOrderAction->InstrumentID,pInputOrderAction->OrderRef,pInputOrderAction->OrderSysID,Req.cancel_cnt2);
-        gbk_printf("请求撤单 %s ref=%s SysID=%s,总撤单数 %lld\n",pInputOrderAction->InstrumentID,pInputOrderAction->OrderRef,pInputOrderAction->OrderSysID,Req.cancel_cnt2);
-    }
-
     // long long price = (pInputOrderAction->LimitPrice + 0.00000001)*10000; //价格转换为整数，方便比较
     // OrderKey key = {pInputOrderAction->InstrumentID,price,pInputOrderAction->Direction,pInputOrderAction->VolumeTotalOriginal,pInputOrderAction->CombOffsetFlag[0] == THOST_FTDC_OF_Open ? 1 ,0};
     // order_map[key] = {price,1,pInputOrderAction->Direction,pInputOrderAction->VolumeTotalOriginal};
@@ -935,21 +948,24 @@ void TradeSession::OnRtnOrder(CThostFtdcOrderField *pRspField)
     auto iter = selfdeal_map.find(key);
     if( is_finish )
     {
-        //订单完结，更新订单状态
-        if( THOST_FTDC_OST_Canceled == pRspField->OrderStatus )
+        if( g_test_mode )
         {
-            if( iter != selfdeal_map.end() )
+            //订单完结，更新订单状态
+            if( THOST_FTDC_OST_Canceled == pRspField->OrderStatus )
             {
-                OrderKey okey = {pRspField->InstrumentID,iter->second.price,iter->second.dir,iter->second.vol,2};
-                auto order = order_map.find(okey);
-                if( order != order_map.end() )
+                if( iter != selfdeal_map.end() )
                 {
-                    order->second.index++;
-                    log_msg("订单 %s(%lld.%04u,%d,%s%s) 重复撤单总次数 %d\n",pRspField->InstrumentID,iter->second.price/10000,iter->second.price%10000,iter->second.vol,   l_order_dir[(iter->second.dir - '0') & 0x1],l_order_flag[(pRspField->CombOffsetFlag[0] - '0') & 0x1],order->second.index);
-                    gbk_printf("订单 %s(%lld.%04u,%d,%s%s) 重复撤单总次数 %d\n",pRspField->InstrumentID,iter->second.price/10000,iter->second.price%10000,iter->second.vol,l_order_dir[(iter->second.dir - '0') & 0x1],l_order_flag[(pRspField->CombOffsetFlag[0] - '0') & 0x1],order->second.index);
+                    OrderKey okey = {pRspField->InstrumentID,iter->second.price,iter->second.dir,iter->second.vol,2};
+                    auto order = order_map.find(okey);
+                    if( order != order_map.end() )
+                    {
+                        order->second.index++;
+                        log_msg("订单 %s(%lld.%04u,%d,%s%s) 重复撤单总次数 %d\n",pRspField->InstrumentID,iter->second.price/10000,iter->second.price%10000,iter->second.vol,   l_order_dir[(iter->second.dir - '0') & 0x1],l_order_flag[(pRspField->CombOffsetFlag[0] - '0') & 0x1],order->second.index);
+                        gbk_printf("订单 %s(%lld.%04u,%d,%s%s) 重复撤单总次数 %d\n",pRspField->InstrumentID,iter->second.price/10000,iter->second.price%10000,iter->second.vol,l_order_dir[(iter->second.dir - '0') & 0x1],l_order_flag[(pRspField->CombOffsetFlag[0] - '0') & 0x1],order->second.index);
+                    }
+                    else
+                        order_map[okey] = iter->second;
                 }
-                else
-                    order_map[okey] = iter->second;
             }
         }
         selfdeal_map.erase(key);

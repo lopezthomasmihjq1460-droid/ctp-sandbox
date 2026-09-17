@@ -8,6 +8,7 @@
 #ifdef WIN32
 	#include <winsock2.h>
 	#include <ws2tcpip.h>
+    #include <io.h>
     #define JAN1970 116444736000000000LL
 #else
 #include <arpa/inet.h>
@@ -57,10 +58,12 @@ long long g_alert_cancel = 0;
 std::string g_app_id = "test";
 std::string g_auth_code = "test";
 bool g_bIsProductionMode = true;
+bool g_test_mode = false;
 
 ServerConfig g_cfg = {0};
 
 FILE *g_log_fp = 0;
+unsigned int g_log_file_day = 0;
 
 struct my_timeval
 {
@@ -117,10 +120,44 @@ unsigned int my_get_day()
     return (pcurt->tm_year + 1900) * 10000 + (pcurt->tm_mon + 1) * 100 + pcurt->tm_mday;
 }
 
+
+int mkdir_each(const char * filename,int mode)
+{
+	const char * pdir = filename;
+	char tempdir[512] ;
+
+	if( (pdir[0] == '\\') && (pdir[1] == '\\') ) //·,for windows
+	{
+		pdir = strchr(filename,'$');
+		if(!pdir)
+			return -1;
+	}
+	while(*pdir)
+	{
+		if( (*pdir == '\\') || (*pdir == '/') )
+		{
+			if( (pdir - filename) >= (512 -1 ))
+				break;
+			strncpy(tempdir,filename,pdir - filename);
+			tempdir[pdir-filename] = '/';
+			tempdir[pdir-filename+1] = 0;
+			if(access(tempdir,00) != 0)
+            {
+#ifdef WIN32                
+				mkdir(tempdir);
+#else
+                mkdir(tempdir,mode);
+#endif                
+            }
+		}
+		pdir++;
+	}
+	return 0;
+}
+
+
 void log_msg(const char *fmt, ...)
 {
-    if( !g_log_fp )
-        return;
 	struct tm tm_buf = {0};
 	struct tm *pcurt;
     my_timeval tv_buffer;
@@ -128,7 +165,29 @@ void log_msg(const char *fmt, ...)
 	my_timeval *tv = &tv_buffer;
     pcurt = my_localtime(&tv->tv_sec,&tm_buf);
 
-    fprintf(g_log_fp, "[%4d-%02d-%02d %02d:%02d:%02d %03d] ",pcurt->tm_year + 1900,pcurt->tm_mon+1,pcurt->tm_mday,pcurt->tm_hour,pcurt->tm_min,pcurt->tm_sec,(tv->tv_usec / 1000) %1000);
+    unsigned int day = (pcurt->tm_year + 1900)*10000 +  (pcurt->tm_mon+1) * 100  + pcurt->tm_mday;
+    if( g_log_file_day != day )
+    {
+        if( g_log_fp )
+        {
+            fclose(g_log_fp);
+            g_log_fp = 0;
+        }
+        char log_file[512] = {0};
+        snprintf(log_file,sizeof(log_file),"%u/%02u/%02u/trade_api.log",(pcurt->tm_year + 1900),(pcurt->tm_mon+1),pcurt->tm_mday);
+        mkdir_each(log_file,0755);
+        g_log_file_day = day;
+        
+        g_log_fp = fopen(log_file,"a");
+        if( g_log_fp )
+        {
+            fprintf(g_log_fp, "log file for :: %u \n",g_log_file_day);
+        }
+    }
+    if( !g_log_fp )
+        return;
+
+    fprintf(g_log_fp, "[%02d:%02d:%02d %03d] ",pcurt->tm_hour,pcurt->tm_min,pcurt->tm_sec,(tv->tv_usec / 1000) %1000);
     va_list args;
     va_start(args, fmt);
     vfprintf(g_log_fp, fmt, args);
@@ -304,6 +363,13 @@ static int load_config_from_db(const char *dbfile)
             else
                 g_bIsProductionMode = true;
         }
+        else if(strcmp(id,"test_mode") == 0)
+        {
+            if( atoi(vals) == 0 )
+                g_test_mode = false;
+            else
+                g_test_mode = true;
+        }
 	}while(1);
 
     sqlite3_finalize(stmt);
@@ -404,7 +470,19 @@ int handle_cmd(const char * cmd)
         log_msg("恢复策略交易\n");
         return 0;
     }
-
+    if (strstr(cmd, "notest") != NULL) {
+        g_test_mode = false;
+        gbk_printf("正式工作模式\n");
+        log_msg("正式工作模式\n");
+        return 0;
+    }    
+    if (strstr(cmd, "test") != NULL) {
+        // 测试模式
+        g_test_mode = true;
+        gbk_printf("测试模式\n");
+        log_msg("测试模式\n");
+        return 0;
+    }
     const char * alert_ptr = strstr(cmd, "alert");
     if( alert_ptr != NULL )
     {
@@ -806,9 +884,7 @@ int main(int argc, char **argv)
         }
     }
 
-
-    g_log_fp = fopen("trade_api.log", "a");
-
+    // 初始化日志文件
     if (load_config_from_db("ctp_sandbox.db") != 0) return 1;
     printf("Load config: %s:%d log:%s daemon:%s\n",g_cfg.listen_ip, g_cfg.listen_port, LOG_FILE, run_daemon ? "yes" : "no");
     //加载ctp的dll
@@ -819,7 +895,8 @@ int main(int argc, char **argv)
         g_ctp_mgr = 0;
         printf("trade mgr init failed\n");
         log_msg("trade mgr init failed\n");
-        fclose(g_log_fp);
+        if( g_log_fp)
+            fclose(g_log_fp);
         sqlite3_close_v2(g_cfg_db);
         return 1;
     }
@@ -847,7 +924,8 @@ int main(int argc, char **argv)
     unlink(CMD_SOCK_PATH);
     printf("Server exited completely\n");
     log_msg("Server exited completely\n");
-    fclose(g_log_fp);
+    if( g_log_fp )
+        fclose(g_log_fp);
     sqlite3_close_v2(g_cfg_db);
     return 0;
 }
