@@ -37,6 +37,61 @@
 
 sqlite3 *  g_cfg_db = 0;
 
+#ifdef WIN32
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
+#else
+    #include <sys/socket.h>
+    #include <netinet/tcp.h>
+    #include <unistd.h>
+#endif
+
+static int set_tcp_keepalive(evutil_socket_t fd, int idle, int intvl, int cnt)
+{
+#ifdef WIN32
+	int bKeepAlive = 1;
+	int nRet = setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, (char*)&bKeepAlive, sizeof(bKeepAlive)); 
+#ifdef _MSC_VER
+	struct tcp_keepalive {
+		u_long onoff;
+		u_long keepalivetime;
+		u_long keepaliveinterval;
+	};
+#define SIO_KEEPALIVE_VALS _WSAIOW(IOC_VENDOR,4)
+#endif
+	//KeepAlive实现 
+    struct tcp_keepalive inKeepAlive = {0}; //输入参数 
+    unsigned long ulInLen = sizeof(struct tcp_keepalive);  
+    
+    unsigned long ulBytesReturn = 0;  
+    
+    //设置socket的keep alive为5秒，并且发送次数为3次   
+    inKeepAlive.onoff = 1;  
+    inKeepAlive.keepaliveinterval = intvl*1000; //每隔多长时间发起一次检测包 
+    inKeepAlive.keepalivetime = idle*1000;		//多长时间没有数据开始进行检测 
+    
+    if (WSAIoctl(fd, SIO_KEEPALIVE_VALS,
+        (LPVOID)&inKeepAlive, ulInLen,   
+        NULL, 0,
+        &ulBytesReturn, NULL, NULL) == SOCKET_ERROR)  
+    {    
+    }
+    return 0;
+#else
+    int opt = 1;
+    if (setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &opt, sizeof(opt)) < 0)
+        return -1;
+    if (setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle)) < 0)
+        return -1;
+    if (setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &intvl, sizeof(intvl)) < 0)
+        return -1;
+    if (setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &cnt, sizeof(cnt)) < 0)
+        return -1;
+    return 0;
+#endif
+    return 0;
+}
+
 // ===================== 配置结构体 =====================
 typedef struct {
     char * listen_ip;
@@ -384,6 +439,13 @@ static void client_read_cb(struct bufferevent *bev, void *arg)
     session->OnClientData();
 }
 
+static void delayed_free_bev(evutil_socket_t fd, short ev, void *arg)
+{
+    struct bufferevent *bev = (struct bufferevent *)arg;
+    printf("!!! delayed_free_bev %p\n", bev);
+    bufferevent_free(bev);
+}
+
 static void client_event_cb(struct bufferevent *bev, short events, void *arg)
 {
     if (events & BEV_EVENT_EOF)
@@ -391,7 +453,16 @@ static void client_event_cb(struct bufferevent *bev, short events, void *arg)
     else if (events & BEV_EVENT_ERROR)
         printf("Client error errno:%d\n", errno);
     printf("client_event_cb bev = %p\n", bev);
-    bufferevent_free(bev);
+
+    bufferevent_disable(bev, EV_READ|EV_WRITE);
+        // 清空回调，避免回调栈返回后libevent继续调用
+    bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
+
+    struct event_base *base = bufferevent_get_base(bev);
+        // 把bev和session包装放到自定义结构，下面示意逻辑
+    event_base_once(base, -1, EV_TIMEOUT, delayed_free_bev, bev, NULL);
+
+    //bufferevent_free(bev);
     delete (TradeSession *)arg;
 }
 
@@ -410,6 +481,8 @@ static void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
     }
 
     //这里分配一个客户端节点
+    int fd_bev = bufferevent_getfd(bev);
+    set_tcp_keepalive(fd_bev, 10, 2, 8);
 
     TradeSession * session = new TradeSession(g_bIsProductionMode);
     session->net.netCtx = bev;
@@ -563,14 +636,20 @@ void event_cb(struct bufferevent *bev, short events, void *ctx) {
     }
     // 发生错误或连接关闭时，释放bufferevent
     if (events & (BEV_EVENT_ERROR | BEV_EVENT_EOF | BEV_EVENT_TIMEOUT)) {
-        bufferevent_free(bev);
+//        bufferevent_free(bev);
+        struct event_base *base = bufferevent_get_base(bev);
+            // 把bev和session包装放到自定义结构，下面示意逻辑
+        event_base_once(base, -1, EV_TIMEOUT, delayed_free_bev, bev, NULL);        
     }
 }
 
 static void cmd_event_cb(struct bufferevent *bev, short events, void *arg)
 {
     printf("cmd_event_cb !!!\n");
-    bufferevent_free(bev);
+    //bufferevent_free(bev);
+    struct event_base *base = bufferevent_get_base(bev);
+        // 把bev和session包装放到自定义结构，下面示意逻辑
+    event_base_once(base, -1, EV_TIMEOUT, delayed_free_bev, bev, NULL);    
 }
 
 static void cmd_accept_cb(struct evconnlistener *listener, evutil_socket_t fd,

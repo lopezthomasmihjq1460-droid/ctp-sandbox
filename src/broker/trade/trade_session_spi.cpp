@@ -318,6 +318,19 @@ do \
     TradeSpi_Response( func ) \
 }
 
+#define SpiHelper_Response_BVA_noprint(func,Field) void TradeSessionSpi::func(Field *pRspField,CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) { \
+    if( bIsLast)\
+        PrintBIA(func);\
+    ShowErrorMsg(func);\
+    if( pRspField )\
+    {\
+        Safe2_strcpy(pRspField->BrokerID,session->broker.raw_broker.c_str());\
+        Safe2_strcpy(pRspField->AccountID,session->broker.raw_user.c_str());\
+        Safe2_strcpy(pRspField->InvestorID,session->broker.raw_user.c_str());\
+    }\
+    TradeSpi_Response( func ) \
+}
+
 #define SpiHelper_Response_All(func,Field) void TradeSessionSpi::func(Field *pRspField,CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) { \
     if( bIsLast)\
         PrintBUIA(func);\
@@ -375,6 +388,7 @@ void TradeSessionSpi::OnFrontConnected()
 
 	if( session->action_on_connected == 0 )
     {
+        log_msg("ReqUserLogin (%s %s) 发起登陆\n",session->loginField.BrokerID,session->loginField.UserID);
         session->m_api->ReqUserLogin(&session->loginField, session->loginRequestId);
         return;
     }
@@ -445,6 +459,7 @@ void TradeSessionSpi::OnRspAuthenticate(CThostFtdcRspAuthenticateField *pRspFiel
     }while(0) ;
 
 //    gbk_printf("ReqUserLogin (%s %s %s)\n",session->loginField.BrokerID,session->loginField.UserID,session->loginField.Password);
+    log_msg("ReqUserLogin (%s %s) 发起登陆\n",session->loginField.BrokerID,session->loginField.UserID);
     session->m_api->ReqUserLogin(&session->loginField, session->loginRequestId);
 }
 
@@ -494,6 +509,15 @@ void TradeSessionSpi::OnRspUserLogin(CThostFtdcRspUserLoginField *pRspField,CTho
 {
     PrintBU(OnRspUserLogin);
     ShowErrorMsg(OnRspUserLogin);
+    if( pRspInfo && pRspInfo->ErrorID != 0 )
+    {
+        log_msg("OnRspUserLogin 失败，%s\n",pRspInfo->ErrorMsg);
+    }
+    else
+    {
+        log_msg("OnRspUserLogin Broker=%s UserID=%s 登陆成功\n",pRspField->BrokerID,pRspField->UserID);
+    }
+
     if( pRspField )
     {
         Safe2_strcpy(pRspField->BrokerID,session->broker.raw_broker.c_str());
@@ -658,7 +682,7 @@ SpiHelper_Response(OnRspQryTraderOffer,CThostFtdcTraderOfferField)
 #endif
 
 ///请求查询投资者结算结果响应
-SpiHelper_Response_BVA(OnRspQrySettlementInfo,CThostFtdcSettlementInfoField)
+SpiHelper_Response_BVA_noprint(OnRspQrySettlementInfo,CThostFtdcSettlementInfoField)
 
 ///请求查询转帐银行响应
 SpiHelper_Response(OnRspQryTransferBank,CThostFtdcTransferBankField)
@@ -721,10 +745,10 @@ SpiHelper_Response_BV(OnRspQrySecAgentCheckMode,CThostFtdcSecAgentCheckModeField
 SpiHelper_Response_BV(OnRspQrySecAgentTradeInfo,CThostFtdcSecAgentTradeInfoField)
 
 ///请求查询期权交易成本响应
-SpiHelper_Response_BV(OnRspQryOptionInstrTradeCost,CThostFtdcOptionInstrTradeCostField)
+SpiHelper_Response_BV_noprint(OnRspQryOptionInstrTradeCost,CThostFtdcOptionInstrTradeCostField)
 
 ///请求查询期权合约手续费响应
-SpiHelper_Response_BV(OnRspQryOptionInstrCommRate,CThostFtdcOptionInstrCommRateField)
+SpiHelper_Response_BV_noprint(OnRspQryOptionInstrCommRate,CThostFtdcOptionInstrCommRateField)
 
 ///请求查询执行宣告响应
 SpiHelper_Response_All(OnRspQryExecOrder,CThostFtdcExecOrderField)

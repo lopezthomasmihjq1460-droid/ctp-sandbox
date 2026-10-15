@@ -32,15 +32,15 @@ TradeApi_FunctionInfo api_function_list[Api_Count] =
 	Declare2Func_0(Init),
 	Declare2Func_0(Join),
 	Declare2Func_0(GetTradingDay),
-#if CTP_VER >= 6007010
-	Declare2Func_1(GetFrontInfo,CThostFtdcFrontInfoField),
+#if CTP_VER >= 6007007
+	Declare2Func_nil(GetFrontInfo,CThostFtdcFrontInfoField),
 #else
 	Declare2Func_nil(GetFrontInfo,char),
 #endif
-	Declare2Func_1(RegisterFront, char *), //需要单独配置调用
-	Declare2Func_1(RegisterNameServer,char *),
-	Declare2Func_1(RegisterFensUserInfo,CThostFtdcFensUserInfoField ),
-	Declare2Func_1(RegisterSpi,CThostFtdcTraderSpi ), //单独调用,信息发给client
+	Declare2Func_nil(RegisterFront, char *), //需要单独配置调用 Declare2Func_1
+	Declare2Func_nil(RegisterNameServer,char *), //Declare2Func_1
+	Declare2Func_nil(RegisterFensUserInfo,CThostFtdcFensUserInfoField ), //Declare2Func_1
+	Declare2Func_nil(RegisterSpi,CThostFtdcTraderSpi ), //单独调用,信息发给client //Declare2Func_1
 //--------------------------------------------------------------------------------------
 #if CTP_VER >= 6007013	
 	PreCheckFunc_2(SubscribePrivateTopic,THOST_TE_RESUME_TYPE ),

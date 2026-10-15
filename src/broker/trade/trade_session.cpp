@@ -46,20 +46,15 @@ std::unordered_map<std::string, InstrumentInfo> g_instrument_map;
 unsigned int g_instrument_tradingday = 0;
 unsigned int g_instrument_day = 0;
 
-TradeSession::TradeSession(bool blsProductionMode)
+TradeSession::TradeSession(bool ProductionMode)
 {
 	has_started = 0;
+    blsProductionMode = ProductionMode;
 	action_on_connected = 0; //默认是认证
-	m_api = g_ctp_mgr->CreateApi(blsProductionMode);
-    m_data.api = m_api;
+
+    m_data.api = nullptr;
     SubscribePrivateTopic_flag = THOST_TERT_NONE;
     SubscribePublicTopic_flag  = THOST_TERT_NONE;
-
-    if( m_api )
-    {
-        m_spi = new TradeSessionSpi(this);
-        m_api->RegisterSpi(m_spi);
-    }
 
     stmt_product_permission = 0;
 	if( g_cfg_db )
@@ -69,6 +64,8 @@ TradeSession::TradeSession(bool blsProductionMode)
     m_data.package_len = 0;
     day.tradingDay = 0;
     day.actionDay = 0;
+
+    m_spi = new TradeSessionSpi(this);
 }
 
 static CThostFtdcTraderSpi spi_empty;
@@ -89,7 +86,7 @@ TradeSession::~TradeSession()
 		m_api = 0;
 	}
 
-    m_data.api = 0;
+    m_data.api = nullptr;
 	delete (TradeSessionSpi*)m_spi;
 	m_spi = 0;
 
@@ -101,12 +98,18 @@ TradeSession::~TradeSession()
 
 int TradeSession::Start(const char * front_addr)
 {
-	if( !m_api )
-		return 0;
-
     if( has_started )
 		return 0;
 	has_started = 1;
+
+    if( !m_api )
+    {
+        m_api = g_ctp_mgr->CreateApi(blsProductionMode);
+        if( !m_api )
+            return 0;
+    }
+    m_data.api = m_api;
+    m_api->RegisterSpi(m_spi);
 
 	m_api->RegisterFront((char *)front_addr);
     if( SubscribePrivateTopic_flag != THOST_TERT_NONE )
@@ -124,9 +127,11 @@ int TradeSession::Start(const char * front_addr)
 void (*funcArr[2][3])(TradeSession * session,TradeApi_FunctionInfo *info) = 
 {
     {
-        [](TradeSession * session,TradeApi_FunctionInfo *info) {(session->m_api->*info->func_0)(); },
-        [](TradeSession * session,TradeApi_FunctionInfo *info) { (session->m_api->*info->func_1)(session->m_data.param[0].ptr); },
+        [](TradeSession * session,TradeApi_FunctionInfo *info) {if(session->m_api) (session->m_api->*info->func_0)(); },
+        [](TradeSession * session,TradeApi_FunctionInfo *info) {if(session->m_api) (session->m_api->*info->func_1)(session->m_data.param[0].ptr); },
         [](TradeSession * session,TradeApi_FunctionInfo *info) { 
+            if( !session->m_api )
+                return;
             int request_id = *((int *)session->m_data.param[1].ptr);
             (session->m_api->*info->func_2)(session->m_data.param[0].ptr, request_id); 
         },   
@@ -171,16 +176,27 @@ int TradeSession::ReadPackage(struct evbuffer *in_buf,PackageData * data)
         if( data->package.header.total_len > TradeApi_Buffer )
         {
             printf("package_len: %d, total_len: %d\n", data->package_len, data->package.header.total_len);
-            if( (readable + data->package_len) < data->package.header.total_len )
-            {
-                evbuffer_drain(in_buf, readable);
-                data->package_len += readable;
-                readable = 0;
+            evbuffer_drain(in_buf, readable);
+            readable = 0;
+            evutil_socket_t fd = bufferevent_getfd(net.netCtx);
+            if (fd < 0)
                 break;
-            }
-            read_len = evbuffer_drain(in_buf, data->package.header.total_len - data->package_len);
-            data->package_len = 0;
-            readable -= read_len;
+            // 停止接收新读，继续把输出缓冲区剩余数据发送出去
+//            bufferevent_disable(net.netCtx, EV_READ);
+            // SHUT_RDWR：双向shutdown，socket进入关闭状态
+            // libevent下一次IO检测会识别连接关闭，回调 client_event_cb，带上 BEV_EVENT_EOF
+            shutdown(fd, 0x02);
+
+            // if( (readable + data->package_len) < data->package.header.total_len )
+            // {
+            //     evbuffer_drain(in_buf, readable);
+            //     data->package_len += readable;
+            //     readable = 0;
+            //     break;
+            // }
+            // read_len = evbuffer_drain(in_buf, data->package.header.total_len - data->package_len);
+            // data->package_len = 0;
+            // readable -= read_len;
             break ;
         }
 
@@ -204,6 +220,17 @@ int TradeSession::ReadPackage(struct evbuffer *in_buf,PackageData * data)
         {
             printf("===> data->package.header.func_id =%d !!!!!\n",data->package.header.func_id);
             log_msg("===> data->package.header.func_id =%d !!!!!\n",data->package.header.func_id);
+
+            evbuffer_drain(in_buf, readable);
+            readable = 0;
+            evutil_socket_t fd = bufferevent_getfd(net.netCtx);
+            if (fd < 0)
+                break;
+            // 停止接收新读，继续把输出缓冲区剩余数据发送出去
+//            bufferevent_disable(net.netCtx, EV_READ);
+            // SHUT_RDWR：双向shutdown，socket进入关闭状态
+            // libevent下一次IO检测会识别连接关闭，回调 client_event_cb，带上 BEV_EVENT_EOF
+            shutdown(fd, 0x02);            
             break; //这里一定出错了
         }
 
@@ -546,6 +573,8 @@ int TradeSession::ReqUserLogin(CThostFtdcReqUserLoginField *pReqField, int reque
         return 1;
     }while(0);
 
+    if( !m_api )
+        return 0;
     m_api->ReqUserLogin(&loginField, request_id);
     return 1;
 }
@@ -698,6 +727,8 @@ int TradeSession::ReqTradingAccountPasswordUpdate(CThostFtdcTradingAccountPasswo
 
 int TradeSession::ReqOrderInsert(CThostFtdcInputOrderField *pInputOrder, int nRequestID)
 {
+    if( !m_api )
+        return 0;
     //0、检查合约是否存在，价格是否符合要求
     long long price = (pInputOrder->LimitPrice + 0.00000001)*10000; //价格转换为整数，方便比较
 
@@ -705,9 +736,9 @@ int TradeSession::ReqOrderInsert(CThostFtdcInputOrderField *pInputOrder, int nRe
     {
         CThostFtdcRspInfoField RspInfo = {0};
         RspInfo.ErrorID = 404;
-        snprintf(RspInfo.ErrorMsg,sizeof(RspInfo.ErrorMsg) -1,"账户暂停交易权限",pInputOrder->InstrumentID);
-        log_msg("%s 报单失败 账户暂停交易权限\n",pInputOrder->InstrumentID);
-        gbk_printf("%s 报单失败 账户暂停交易权限\n",pInputOrder->InstrumentID);
+        snprintf(RspInfo.ErrorMsg,sizeof(RspInfo.ErrorMsg) -1,"暂停交易策略执行",pInputOrder->InstrumentID);
+        log_msg("%s 报单失败 暂停交易策略执行\n",pInputOrder->InstrumentID);
+        gbk_printf("%s 报单失败 暂停交易策略执行\n",pInputOrder->InstrumentID);
         m_spi->OnRspOrderInsert(pInputOrder, &RspInfo, nRequestID, true) ;
 
         return 0;
@@ -859,6 +890,8 @@ int TradeSession::ReqOrderInsert(CThostFtdcInputOrderField *pInputOrder, int nRe
 
 int TradeSession::ReqOrderAction(CThostFtdcInputOrderActionField *pInputOrderAction, int nRequestID)
 {
+    if( !m_api )
+        return 0;
     if( g_bIsPause || g_bIsClose )
     {
         CThostFtdcRspInfoField RspInfo = {0};

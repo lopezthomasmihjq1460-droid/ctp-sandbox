@@ -163,7 +163,7 @@ public:
 
     CThostFtdcTraderApi * m_api;
     short has_started;
-
+    bool blsProductionMode;
 
     CThostFtdcReqUserLoginField loginField;
     int action_on_connected;

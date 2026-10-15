@@ -5,6 +5,64 @@
 
 #include "connect_mgr.h"
 
+#include <event2/util.h>
+
+#ifdef WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "ws2_32.lib")
+#else
+#include <sys/socket.h>
+#include <netinet/tcp.h>
+#include <unistd.h>
+#endif
+
+static int set_tcp_keepalive(evutil_socket_t fd, int idle, int intvl, int cnt)
+{
+#ifdef WIN32
+	int bKeepAlive = 1;
+	int nRet = setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, (char*)&bKeepAlive, sizeof(bKeepAlive)); 
+#ifdef _MSC_VER
+	struct tcp_keepalive {
+		u_long onoff;
+		u_long keepalivetime;
+		u_long keepaliveinterval;
+	};
+#define SIO_KEEPALIVE_VALS _WSAIOW(IOC_VENDOR,4)
+#endif
+	//KeepAlive实现 
+    struct tcp_keepalive inKeepAlive = {0}; //输入参数 
+    unsigned long ulInLen = sizeof(struct tcp_keepalive);  
+    
+    unsigned long ulBytesReturn = 0;  
+    
+    //设置socket的keep alive为5秒，并且发送次数为3次   
+    inKeepAlive.onoff = 1;  
+    inKeepAlive.keepaliveinterval = intvl*1000; //每隔多长时间发起一次检测包 
+    inKeepAlive.keepalivetime = idle*1000;		//多长时间没有数据开始进行检测 
+    
+    if (WSAIoctl(fd, SIO_KEEPALIVE_VALS,
+        (LPVOID)&inKeepAlive, ulInLen,   
+        NULL, 0,
+        &ulBytesReturn, NULL, NULL) == SOCKET_ERROR)  
+    {    
+    }
+    return 0;
+#else
+    int opt = 1;
+    if (setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &opt, sizeof(opt)) < 0)
+        return -1;
+    if (setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle)) < 0)
+        return -1;
+    if (setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &intvl, sizeof(intvl)) < 0)
+        return -1;
+    if (setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &cnt, sizeof(cnt)) < 0)
+        return -1;
+    return 0;
+#endif
+    return 0;
+}
+
 
 const char * protocal_prefix[] = 
 {
@@ -106,6 +164,25 @@ const char * check_broker_addr(const char * addr ,long len,long *port_out,const 
 static void single_conn_event_cb(struct bufferevent *bev, short events, void *arg);
 static void retry_connect_cb(evutil_socket_t fd, short what, void *arg);
 
+static void delayed_free_bev(evutil_socket_t fd, short ev, void *arg)
+{
+    struct bufferevent *bev = (struct bufferevent *)arg;
+    printf("!!! delayed_free_bev %p\n", bev);
+    bufferevent_free(bev);
+}
+
+void multi_free_dev(struct bufferevent *bev)
+{
+    if( !bev )
+        return;
+    bufferevent_disable(bev, EV_READ|EV_WRITE);
+    bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
+
+    struct event_base *base = bufferevent_get_base(bev);
+        // 把bev和session包装放到自定义结构，下面示意逻辑
+    event_base_once(base, -1, EV_TIMEOUT, delayed_free_bev, bev, NULL);
+}
+
 void reset_addr(MultiConnCtx *ctx)
 {
 	memset(ctx->targets,0,sizeof(TargetAddr) * ctx->max_cnt);
@@ -195,7 +272,9 @@ static void close_all_other_bev(MultiConnCtx *ctx, struct bufferevent *keep)
         printf("close_all_other_bev close bev %p\n", item->bev);
         item->is_abandoned = true;
         if( item->bev )
-            bufferevent_free(item->bev);
+        {
+            multi_free_dev(item->bev);
+        }
         item->bev = nullptr;
     }
 }
@@ -262,7 +341,7 @@ static void single_conn_event_cb(struct bufferevent *bev, short events, void *ar
     // 连接成功
     if (events & BEV_EVENT_CONNECTED) {
         if (ctx->selected) {
-            bufferevent_free(bev);
+            multi_free_dev(bev);
             printf("single_conn_event_cb bev %p already selected\n", bev);
             return;
         }
@@ -292,7 +371,7 @@ static void single_conn_event_cb(struct bufferevent *bev, short events, void *ar
             ctx->on_disconnected(ctx,ctx->user_arg);
             ctx->selected = false;
             ctx->success_item = nullptr;
-            bufferevent_free(bev);
+            multi_free_dev(bev);
             target_item->bev = nullptr;
 
             multi_conn_set_retry(ctx, 3000);
@@ -308,14 +387,14 @@ static void single_conn_event_cb(struct bufferevent *bev, short events, void *ar
             if (ctx->on_connect_faild) {
                 ctx->on_connect_faild(ctx,ctx->user_arg);
             }
-            bufferevent_free(bev);
+            multi_free_dev(bev);
             target_item->bev = nullptr;
 
             multi_conn_set_retry(ctx, 3000);
             trigger_retry(ctx);
         }
         else{
-            bufferevent_free(bev);
+            multi_free_dev(bev);
             target_item->bev = nullptr;
         }
     }
@@ -359,6 +438,8 @@ int multi_conn_start(MultiConnCtx *ctx)
         );
         if (!bev) continue;
 
+        int fd = bufferevent_getfd(bev);
+        set_tcp_keepalive(fd, 10, 2, 8);
         ctx->conn_items[i].bev = bev;
         printf("multi_conn_start bev %p,single_conn_event_cb\n", bev);
         // 初始读回调为空，连接成功后替换为业务回调
@@ -371,7 +452,7 @@ int multi_conn_start(MultiConnCtx *ctx)
         );
         if (ret < 0) {
             printf("multi_conn_start bev %p connect failed\n", bev);
-            bufferevent_free(bev);
+            multi_free_dev(bev);
             ctx->conn_items[i].bev = NULL;
             ctx->fail_count++;
         }

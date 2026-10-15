@@ -44,7 +44,7 @@ public:
 	/// @param pFrontInfo：输入输出参数，用于存储获取到的前置信息，不能为空
 	/// @remark 连接成功后，可获取正确的前置地址信息
 	/// @remark 登录成功后，可获取正确的前置流控信息
-#if CTP_VER >= 6007010
+#if CTP_VER >= 6007007
 	virtual void GetFrontInfo(CThostFtdcFrontInfoField* pFrontInfo);
 #endif	
 	///注册前置机网络地址

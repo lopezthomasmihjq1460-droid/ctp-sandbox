@@ -19,6 +19,11 @@ struct event_base *g_base = 0;
 std::thread net_thread;
 
 
+#define STR_IMPL(x) #x
+#define STR(x) STR_IMPL(x)
+
+#pragma message("CTP_VER = " STR(CTP_VER))
+
 int g_base_run = 0;
 
 FILE *g_log_fp = 0;
@@ -432,7 +437,7 @@ const char * TraderApiHelper::GetTradingDay()
     return m_data->TradingDayStr;
 }
 
-#if CTP_VER >= 6007010	
+#if CTP_VER >= 6007007	
 void TraderApiHelper::GetFrontInfo(CThostFtdcFrontInfoField* pFrontInfo)
 {
 }
@@ -545,14 +550,15 @@ void TraderApiHelper::SubscribePublicTopic(THOST_TE_RESUME_TYPE nResumeType)
 
 int TraderApiHelper::ReqAuthenticate(CThostFtdcReqAuthenticateField *pReqField, int nRequestID) 
 {
+	log_msg("TraderApiHelper::ReqAuthenticate\n");
     TradeApi_CallFuncRet(ReqAuthenticate) //该函数发起一个
-
 }
 
 	///注册用户终端信息，用于中继服务器多连接模式
 	///需要在终端认证成功后，用户登录前调用该接口
 int TraderApiHelper::RegisterUserSystemInfo(CThostFtdcUserSystemInfoField *pReqField) 
 {
+	log_msg("TraderApiHelper::RegisterUserSystemInfo \n");
     TradeApi_CallFuncSimpleRet(RegisterUserSystemInfo)
 }
 
