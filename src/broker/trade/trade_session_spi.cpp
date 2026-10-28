@@ -655,7 +655,14 @@ void TradeSessionSpi::OnRspQryInstrument(CThostFtdcInstrumentField *pRspField,CT
         if( pRspInfo && pRspInfo->ErrorID != 0 )
             break;
         
-        g_instrument_map[pRspField->InstrumentID] = {pRspField->InstrumentID,(long long)(pRspField->PriceTick+0.000000001)*10000,pRspField->MaxLimitOrderVolume};
+        long long price_tick = (pRspField->PriceTick+0.000000001)*10000;
+        g_instrument_map[pRspField->InstrumentID] = {pRspField->InstrumentID,price_tick,pRspField->MaxLimitOrderVolume};
+        auto instrument = g_instrument_map.find(pRspField->InstrumentID);
+        if( instrument->second.price_tick == 0 )
+        {
+            printf("合约 %s 价格步长为0,pRspField->PriceTick = %lf,price_tick = %lld\n",pRspField->InstrumentID,pRspField->PriceTick,price_tick);
+        }
+
     }while(0);
 
     //session->instrument_map[pRspField->InstrumentID] = {pRspField->InstrumentID,(long long)(pRspField->PriceTick+0.000000001)*10000,pRspField->MaxLimitOrderVolume};

@@ -65,6 +65,7 @@ TradeSession::TradeSession(bool ProductionMode)
     day.tradingDay = 0;
     day.actionDay = 0;
 
+    m_api = 0;
     m_spi = new TradeSessionSpi(this);
 }
 
@@ -496,6 +497,7 @@ int TradeSession::ReqUserLogin(CThostFtdcReqUserLoginField *pReqField, int reque
     char front_addr_buf[128] = {0};
     const char * front_addr = nullptr;
 
+    //gbk_printf("%s %s\n",pReqField->UserID,pReqField->Password);
 	do
 	{
         if( !stmt )
@@ -522,6 +524,8 @@ int TradeSession::ReqUserLogin(CThostFtdcReqUserLoginField *pReqField, int reque
     {
         CThostFtdcRspUserLoginField RspField = {0};
         CThostFtdcRspInfoField RspInfo;
+
+        //gbk_printf("%s %s\n",pReqField->UserID,pReqField->Password);
 
         RspInfo.ErrorID = 48;
         strncpy(RspInfo.ErrorMsg,"broker not find",sizeof(RspInfo.ErrorMsg) -1);
@@ -749,8 +753,9 @@ int TradeSession::ReqOrderInsert(CThostFtdcInputOrderField *pInputOrder, int nRe
         if( !g_test_mode )
             break;
 
-        if( g_instrument_tradingday != day.tradingDay || g_instrument_day != day.actionDay )
+        if(g_instrument_tradingday ==0 || g_instrument_tradingday < day.tradingDay || g_instrument_day < day.actionDay )
         {
+            printf("g_instrument_tradingday = %u, g_instrument_day = %u,day.tradingDay = %u,day.actionDay = %u\n",g_instrument_tradingday,g_instrument_day,day.tradingDay,day.actionDay);
             //需要重查合约
             CThostFtdcQryInstrumentField req = {0};
             m_api->ReqQryInstrument(&req, 0);
@@ -791,8 +796,12 @@ int TradeSession::ReqOrderInsert(CThostFtdcInputOrderField *pInputOrder, int nRe
         }
 
         if( instrument->second.price_tick == 0 )
+        {
+            printf("合约 %s 价格步长为0\n",pInputOrder->InstrumentID);
             break;
+        }
     
+        printf("合约 %s 报单价格 %llu,余数 = %llu\n",pInputOrder->InstrumentID,price,price % instrument->second.price_tick);
         if( (price % instrument->second.price_tick) != 0 )
         {
             //价格不符合要求，拒绝该订单
@@ -873,7 +882,8 @@ int TradeSession::ReqOrderInsert(CThostFtdcInputOrderField *pInputOrder, int nRe
             order = order_map.find(key);
         }
 
-        Req.order_cnt2++;
+        Req.order_cnt2 = Req.order_cnt + 1;
+        
         if( g_alert_order > 0 && Req.order_cnt2 > g_alert_order )
         {
             log_msg("!!!! 报单 %s(%lld.%04u,%s%s,%d) 次数 %d 超过预警数量 %d\n",pInputOrder->InstrumentID,price/10000,price%10000,l_order_dir[ (pInputOrder->Direction - '0') & 0x1],l_order_flag[ (pInputOrder->CombOffsetFlag[0] - '0') & 0x1],pInputOrder->VolumeTotalOriginal,Req.order_cnt2,g_alert_order);
@@ -918,7 +928,7 @@ int TradeSession::ReqOrderAction(CThostFtdcInputOrderActionField *pInputOrderAct
             return 0;
         }
     }
-    Req.cancel_cnt2++;
+    Req.cancel_cnt2 = Req.cancel_cnt + 1;
 
     if( g_test_mode )
     {
@@ -986,9 +996,10 @@ void TradeSession::OnRtnOrder(CThostFtdcOrderField *pRspField)
             //订单完结，更新订单状态
             if( THOST_FTDC_OST_Canceled == pRspField->OrderStatus )
             {
-                if( iter != selfdeal_map.end() )
+                //if( iter != selfdeal_map.end() )
                 {
-                    OrderKey okey = {pRspField->InstrumentID,iter->second.price,iter->second.dir,iter->second.vol,2};
+                    long long price = (pRspField->LimitPrice + 0.000000001)*10000;
+                    OrderKey okey = {pRspField->InstrumentID,price,pRspField->Direction,pRspField->VolumeTotalOriginal,2};
                     auto order = order_map.find(okey);
                     if( order != order_map.end() )
                     {
@@ -1009,8 +1020,9 @@ void TradeSession::OnRtnOrder(CThostFtdcOrderField *pRspField)
         return;
 
     Req.order_cnt++;
-    // log_msg("当日报单总次数 %lld\n",Req.order_cnt);
-    // gbk_printf("当日报单总次数 %lld\n",Req.order_cnt);
+//    Req.order_cnt2++;
+    log_msg("当日报单总次数 %lld\n",Req.order_cnt);
+    gbk_printf("当日报单总次数 %lld\n",Req.order_cnt);
 
     long long price = (pRspField->LimitPrice + 0.00000001)*10000; 
     selfdeal_map[key] = {price,1,pRspField->Direction,pRspField->VolumeTotalOriginal};
