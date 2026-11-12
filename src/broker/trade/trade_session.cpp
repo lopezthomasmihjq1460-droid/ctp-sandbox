@@ -252,9 +252,14 @@ int TradeSession::ReadPackage(struct evbuffer *in_buf,PackageData * data)
 
         if( callback->func_0 == nullptr )
         {
+            if( Api_RegisterUserSystemInfo == data->package.header.func_id )
+                break;
+            if( Api_SubmitUserSystemInfo == data->package.header.func_id )
+                break;
+
             printf("===> %s , 暂不支持 的API !!!!!\n",callback->name);
             log_msg("===> %s , 暂不支持 的API !!!!!\n",callback->name);
-            break; //参数数量不匹配，这里一定出错了
+            break; 
         }
 
         //解析返回数据，调用回调函数

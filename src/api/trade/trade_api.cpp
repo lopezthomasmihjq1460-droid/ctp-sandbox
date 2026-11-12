@@ -629,15 +629,17 @@ int TraderApiHelper::ReqAuthenticate(CThostFtdcReqAuthenticateField *pReqField, 
 	///需要在终端认证成功后，用户登录前调用该接口
 int TraderApiHelper::RegisterUserSystemInfo(CThostFtdcUserSystemInfoField *pReqField) 
 {
-	log_msg("TraderApiHelper::RegisterUserSystemInfo \n");
-    TradeApi_CallFuncSimpleRet(RegisterUserSystemInfo)
+    return 0;//仅仅支持直连
+	// log_msg("TraderApiHelper::RegisterUserSystemInfo \n");
+    // TradeApi_CallFuncSimpleRet(RegisterUserSystemInfo)
 }
 
 	///上报用户终端信息，用于中继服务器操作员登录模式
 	///操作员登录后，可以多次调用该接口上报客户信息
 int TraderApiHelper::SubmitUserSystemInfo(CThostFtdcUserSystemInfoField *pReqField) 
 {
-    TradeApi_CallFuncSimpleRet(SubmitUserSystemInfo)
+    return 0;//仅仅支持直连
+//    TradeApi_CallFuncSimpleRet(SubmitUserSystemInfo)
 }
 
 #if CTP_VER >= 6007010

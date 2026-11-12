@@ -50,8 +50,10 @@ TradeApi_FunctionInfo api_function_list[Api_Count] =
 	PreCheckFunc_1(SubscribePublicTopic,THOST_TE_RESUME_TYPE ),
 
 	PreCheckFunc_2(ReqAuthenticate,CThostFtdcReqAuthenticateField ),
-	Declare2Func_B_U(RegisterUserSystemInfo,CThostFtdcUserSystemInfoField ),
-	Declare2Func_B_U(SubmitUserSystemInfo,CThostFtdcUserSystemInfoField ),
+//	Declare2Func_B_U(RegisterUserSystemInfo,CThostFtdcUserSystemInfoField ),
+//	Declare2Func_B_U(SubmitUserSystemInfo,CThostFtdcUserSystemInfoField ),
+	Declare2Func_nil(RegisterUserSystemInfo,CThostFtdcUserSystemInfoField ), //仅仅支持直连
+	Declare2Func_nil(SubmitUserSystemInfo,CThostFtdcUserSystemInfoField ), //仅仅支持直连
 
 #if CTP_VER >= 6007010
 	Declare2Func_B_U(RegisterWechatUserSystemInfo,CThostFtdcWechatUserSystemInfoField ),
