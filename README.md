@@ -9,9 +9,16 @@
 本软件分成客户端和服务器端
 
 ## 客户端
-	1、任意基于CTP api开发的客户端或者程序化软件，只要替换对应程序的thosttraderapi_se.so为本软件相应代码版本
+	1、当前二进制目录默认使用OpenCTP开源的ViTrade作为用户交互UI，通过替换ctp对应交易库实现完整功能。
+       若需要其他交易前端软件，只要是对应CTP 版本 ABI兼容，都可以直接替换 thosttraderapi_se.so 文件来支持。
+       ** 保证ctp头文件版本一致，比如都是6.7.13
+       ** 主机平台一致 windows / linux 
+       ** 32bit/64bit 对应一致
+
+       ** ViTrader的源码请从OpenCTP的开源路径自行下载。***
+       
 	2、修改柜台地址为服务器配置的地址和端口，例如(tcp://127.0.0.1:30001)
-	**本程序默认提供 基于6.6.1_P的编译二进制版本（dist/api/debug|release|win32|win64），其他版本请自行编译**
+	**本程序默认提供 基于6.7.13的编译二进制版本（dist/api/debug|release|win32|win64），其他版本请自行编译**
 
 ## 服务器配置
 **==ctp_sandbox.db为sqlite数据库==**

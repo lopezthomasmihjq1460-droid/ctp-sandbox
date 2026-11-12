@@ -394,7 +394,7 @@ int TradeSession::ReadPackage(struct evbuffer *in_buf,PackageData * data)
                     break;
                 printf("===>Field Len=%3d,need =%3d , %s,id=%d\n", p0_size,callback->psize[0],callback->name,data->package.header.func_id);                
             }while(0);
-            log_msg("===>Field Len=%3d,need =%3d , %s,id=%d\n", p0_size,callback->psize[0],callback->name,data->package.header.func_id);
+            //log_msg("===>Field Len=%3d,need =%3d , %s,id=%d\n", p0_size,callback->psize[0],callback->name,data->package.header.func_id);
             funcArr[callback->is_precheck][callback->p_cnt](this,callback);
         }
     }while(0);
@@ -1021,9 +1021,11 @@ void TradeSession::OnRtnOrder(CThostFtdcOrderField *pRspField)
 
     Req.order_cnt++;
 //    Req.order_cnt2++;
-    log_msg("当日报单总次数 %lld\n",Req.order_cnt);
-    gbk_printf("当日报单总次数 %lld\n",Req.order_cnt);
-
+    if( g_test_mode )
+    {
+        log_msg("当日报单总次数 %lld\n",Req.order_cnt);
+        gbk_printf("当日报单总次数 %lld\n",Req.order_cnt);
+    }
     long long price = (pRspField->LimitPrice + 0.00000001)*10000; 
     selfdeal_map[key] = {price,1,pRspField->Direction,pRspField->VolumeTotalOriginal};
 }

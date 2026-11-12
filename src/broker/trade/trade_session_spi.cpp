@@ -450,8 +450,8 @@ void TradeSessionSpi::OnRspAuthenticate(CThostFtdcRspAuthenticateField *pRspFiel
 
         RspInfo.ErrorID = 48;
         strncpy(RspInfo.ErrorMsg,"客户端未认证通过",sizeof(RspInfo.ErrorMsg) -1);
-        strncpy(RspField.BrokerID,session->broker.raw_broker.c_str(),sizeof(RspField.BrokerID) - 1);
-        strncpy(RspField.UserID,session->broker.raw_user.c_str(),sizeof(RspField.UserID) - 1);
+//        strncpy(RspField.BrokerID,session->broker.raw_broker.c_str(),sizeof(RspField.BrokerID) - 1);
+//        strncpy(RspField.UserID,session->broker.raw_user.c_str(),sizeof(RspField.UserID) - 1);
         
         session->m_spi->OnRspUserLogin(&RspField, &RspInfo, nRequestID, true) ;
 
@@ -787,9 +787,10 @@ SpiHelper_Response_BA(OnRspQryAccountregister,CThostFtdcAccountregisterField)
 ///错误应答
 void TradeSessionSpi::OnRspError(CThostFtdcRspInfoField *pRspField, int nRequestID, bool bIsLast)
 {
+    CThostFtdcRspInfoField *pRspInfo = pRspField;
+    ShowErrorMsg(OnRspError);
     TradeSpi_RspError( OnRspError )
 }
-
 
 ///报单通知
 void TradeSessionSpi::OnRtnOrder(CThostFtdcOrderField *pRspField)

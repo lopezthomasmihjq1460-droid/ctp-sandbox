@@ -7,6 +7,7 @@
 #define Declare2Func_2(FuncName,type) {{sizeof(type),sizeof(CThostFtdcRspInfoField),0,0},2,0,(TradeSpi_Func_0)&CThostFtdcTraderSpi::FuncName,#FuncName}
 #define Declare2Func_3(FuncName,type) {{sizeof(type),sizeof(CThostFtdcRspInfoField),sizeof(int),0},3,0,(TradeSpi_Func_0)&CThostFtdcTraderSpi::FuncName,#FuncName}
 #define Declare2Func_4(FuncName,type) {{sizeof(type),sizeof(CThostFtdcRspInfoField),sizeof(int),2},4,0,(TradeSpi_Func_0)&CThostFtdcTraderSpi::FuncName,#FuncName}
+#define Declare2Func_Err() {{sizeof(CThostFtdcRspInfoField),sizeof(int),2},3,0,(TradeSpi_Func_0)&CThostFtdcTraderSpi::OnRspError,"OnRspError"}
 
 
 static TradeSpi_CallbackInfo spi_callback_list[Spi_CallbackCount] = 
@@ -99,7 +100,7 @@ static TradeSpi_CallbackInfo spi_callback_list[Spi_CallbackCount] =
 	Declare2Func_4(OnRspQryCombAction,CThostFtdcCombActionField ),
 	Declare2Func_4(OnRspQryTransferSerial,CThostFtdcTransferSerialField ),
 	Declare2Func_4(OnRspQryAccountregister,CThostFtdcAccountregisterField ),
-	Declare2Func_4(OnRspError,CThostFtdcRspInfoField ),
+	Declare2Func_Err(),
 	Declare2Func_1(OnRtnOrder,CThostFtdcOrderField ),
 	Declare2Func_1(OnRtnTrade,CThostFtdcTradeField ),
 

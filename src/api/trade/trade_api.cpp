@@ -131,6 +131,7 @@ struct TradeHelperData
     int auth_requestID;
 
     FlowControl_Data flow_control;
+    char buffer_ext[2048];
 };
 
 
@@ -207,7 +208,7 @@ int mgr_data_read_package(struct bufferevent *bev, TradeHelperData * data)
     size_t readable = evbuffer_get_length(in_buf);
     if( readable <= 0 )
     {
-        printf("mgr_data_read_cb error 01\n");
+        log_msg("mgr_data_read_cb error 01\n");
         return 0;
     }
 
@@ -226,14 +227,14 @@ int mgr_data_read_package(struct bufferevent *bev, TradeHelperData * data)
         readable -= read_len;
         if( data->package_len < TradeApi_Header_Size )
         {
-            printf("mgr_data_read_cb error 01\n");
+            log_msg("mgr_data_read_cb error 01\n");
             return readable; //这里一定出错了
         }
     }
 
     if( data->package.header.total_len > TradeApi_Buffer )
     {
-        printf("package_len: %d, total_len: %d\n", data->package_len, data->package.header.total_len);
+        log_msg("package_len: %d, total_len: %d\n", data->package_len, data->package.header.total_len);
         if( (readable + data->package_len) < data->package.header.total_len )
         {
             evbuffer_drain(in_buf, readable);
@@ -264,12 +265,12 @@ int mgr_data_read_package(struct bufferevent *bev, TradeHelperData * data)
 
     if( data->package.header.func_id >= Spi_CallbackCount )
     {
-        printf("mgr_data_read_cb error data->package.header.func_id = %d\n",data->package.header.func_id);
+        log_msg("mgr_data_read_cb error data->package.header.func_id = %d\n",data->package.header.func_id);
         return readable; //这里一定出错了
     }
     if( data->package.header.p_cnt > 8 )
     {
-        printf("mgr_data_read_cb error data->package.header.p_cnt = %d\n", data->package.header.p_cnt );
+        log_msg("mgr_data_read_cb error data->package.header.p_cnt = %d\n", data->package.header.p_cnt );
         return readable; //这里一定出错了
     }
 
@@ -277,43 +278,113 @@ int mgr_data_read_package(struct bufferevent *bev, TradeHelperData * data)
 
     if( callback->p_cnt != data->package.header.p_cnt )
     {
-        log_msg("<== %s 不支持 01\n",callback->name);
+        log_msg("<== %s 不支持 func_id=%d\n",callback->name,data->package.header.func_id);
         return readable; //参数数量不匹配，这里一定出错了
     }
     if( !callback->func.func_0 )
     {
-        log_msg("<== %s 不支持 02\n",callback->name);
+        log_msg("<== %s 不支持 02,func_id=%d\n",callback->name,data->package.header.func_id);
         return readable; //函数为0,可能是新旧版本差异导致
     }
 
     //解析返回数据，调用回调函数
     //目前最多只有4个参数
-
+//===================================
     int offset = TradeApi_Header_Size;
     char * ptr = data->package.data + offset;
-    for(int i=0; i< data->package.header.p_cnt; i++)
+
+    unsigned short p0_size = 0;
+
+    if( data->package.header.p_cnt > 0 )
+    {
+        p0_size = *((unsigned short *)ptr);
+            offset += sizeof(unsigned short);
+        if( (p0_size + offset) > data->package.header.total_len )
+        {
+            return readable; //这里一定出错了
+        }
+        ptr += sizeof(unsigned short);
+        if( p0_size == 0 )
+        {
+            data->param[0].ptr = nullptr;
+            data->param[0].len = 0;
+        }
+        else if( p0_size < callback->psize[0] )
+        {
+            memset(data->buffer_ext ,0,callback->psize[0]);
+            memcpy(data->buffer_ext,ptr,p0_size);
+            memset(data->buffer_ext + p0_size,0,callback->psize[0] - p0_size);
+            data->param[0].len = callback->psize[0];
+            data->param[0].ptr = data->buffer_ext;
+
+            //printf("%s need size=%d ,recv size = %d\n",callback->name,callback->psize[0],p0_size);
+            // return readable;
+        }
+        else
+        {
+            data->param[0].len = p0_size;
+            data->param[0].ptr = ptr;       
+        }
+        offset += p0_size;
+        ptr += p0_size;            
+    }
+
+    for(int i=1; i< data->package.header.p_cnt; i++)
     {
         unsigned short param_len = *((unsigned short *)ptr);
         offset += sizeof(unsigned short);
         if( (param_len + offset) > data->package.header.total_len )
         {
+            log_msg("2 %s need size=%d ,recv size = %d\n",callback->name,callback->psize[0],param_len);
             return readable; //这里一定出错了
         }
-        if( param_len > 0 && callback->psize[i] > param_len )
+        ptr += sizeof(unsigned short);
+
+        if( param_len > 0 && callback->psize[i] != param_len )
         {
+            log_msg("3 %s need size=%d ,recv size = %d\n",callback->name,callback->psize[0],param_len);
             return readable; //参数长度不匹配，这里一定出错了
         }
 
-        ptr += sizeof(unsigned short);
-
-        data->param[i].len = param_len;
-        data->param[i].ptr = ptr;
         if( param_len == 0 )
             data->param[i].ptr = nullptr;
+        else
+        {
+            data->param[i].len = param_len;
+            data->param[i].ptr = ptr;
+        }
         
         offset += param_len;
         ptr += param_len;
     }
+//===================================
+    // int offset = TradeApi_Header_Size;
+    // char * ptr = data->package.data + offset;
+    // for(int i=0; i< data->package.header.p_cnt; i++)
+    // {
+    //     unsigned short param_len = *((unsigned short *)ptr);
+    //     offset += sizeof(unsigned short);
+    //     if( (param_len + offset) > data->package.header.total_len )
+    //     {
+    //         log_msg("<== %s func_id = %d 001\n",callback->name,data->package.header.func_id);
+    //         return readable; //这里一定出错了
+    //     }
+    //     if( param_len > 0 && callback->psize[i] > param_len )
+    //     {
+    //         log_msg("<== %s func_id = %d 002\n",callback->name,data->package.header.func_id);
+    //         return readable; //参数长度不匹配，这里一定出错了
+    //     }
+
+    //     ptr += sizeof(unsigned short);
+
+    //     data->param[i].len = param_len;
+    //     data->param[i].ptr = ptr;
+    //     if( param_len == 0 )
+    //         data->param[i].ptr = nullptr;
+        
+    //     offset += param_len;
+    //     ptr += param_len;
+    // }
 
     if( data->package.header.p_cnt == 4 )
     {
