@@ -447,19 +447,12 @@ TraderApiHelper::~TraderApiHelper()
     delete m_data;
 }
 
-#if CTP_VER >= 6007011
-ctp_helper_trade_API CThostFtdcTraderApi *CThostFtdcTraderApi::CreateFtdcTraderApi(const char *pszFlowPath, bool bIsProductionMode )
+CThostFtdcTraderApi * do_create_api()
 {
-    return new TraderApiHelper;
-}
-#else
-ctp_helper_trade_API CThostFtdcTraderApi *CThostFtdcTraderApi::CreateFtdcTraderApi(const char *pszFlowPath )
-{
-	log_msg("TraderApiHelper::CreateFtdcTraderApi ...\n");
-    return new TraderApiHelper;
+	return new TraderApiHelper;
 }
 
-#endif
+
 	///获取API的版本信息
 	///@retrun 获取到的版本号
 ctp_helper_trade_API const char *CThostFtdcTraderApi::GetApiVersion()
@@ -646,12 +639,14 @@ int TraderApiHelper::SubmitUserSystemInfo(CThostFtdcUserSystemInfoField *pReqFie
 ///注册用户终端信息，用于中继服务器多连接模式.用于微信小程序等应用上报信息.
 int TraderApiHelper::RegisterWechatUserSystemInfo(CThostFtdcWechatUserSystemInfoField *pReqField) 
 {
-    TradeApi_CallFuncSimpleRet(RegisterWechatUserSystemInfo)
+	return 0;
+    //TradeApi_CallFuncSimpleRet(RegisterWechatUserSystemInfo)
 }
 ///上报用户终端信息，用于中继服务器操作员登录模式.用于微信小程序等应用上报信息.
 int TraderApiHelper::SubmitWechatUserSystemInfo(CThostFtdcWechatUserSystemInfoField *pReqField) 
 {
-    TradeApi_CallFuncSimpleRet(SubmitWechatUserSystemInfo)
+	return 0;
+    //TradeApi_CallFuncSimpleRet(SubmitWechatUserSystemInfo)
 }
 #endif
 	///用户登录请求
